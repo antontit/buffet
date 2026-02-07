@@ -30,4 +30,27 @@ final class PlacementRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
+
+    /**
+     * @return list<Placement>
+     */
+    public function findByStackId(int $stackId): array
+    {
+        return $this->createQueryBuilder('p')
+            ->where('p.stackId = :stackId')
+            ->setParameter('stackId', $stackId)
+            ->orderBy('p.stackIndex', 'ASC')
+            ->addOrderBy('p.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    public function getNextStackId(): int
+    {
+        $value = $this->getEntityManager()
+            ->getConnection()
+            ->fetchOne('SELECT COALESCE(MAX(stack_id), 0) + 1 FROM placement');
+
+        return (int) $value;
+    }
 }
