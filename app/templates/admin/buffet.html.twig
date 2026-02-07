@@ -29,7 +29,7 @@
             </div>
             <div class="buffet-items">
                 {% for dish in dishes %}
-                    <img src="{{ asset(dish.image) }}" alt="{{ dish.name|e('html_attr') }}">
+                    <img src="{{ asset(dish.image) }}" alt="{{ dish.name }}">
                 {% endfor %}
             </div>
         </div>
