@@ -2,19 +2,26 @@
 
 {% block content_title %}Buffet{% endblock %}
 
+{% block head_stylesheets %}
+    {{ parent() }}
+    <link rel="stylesheet" href="{{ asset('styles/buffet.css') }}">
+{% endblock %}
+
 {% block main %}
     <div class="content-panel">
         <h2 class="h4 mb-3">Overview</h2>
         <p>Welcome to the Buffet admin. Use the menu to manage dishes and review updates.</p>
-        <div class="row g-3 mt-3">
-            <div class="col-12 col-lg-10">
-                <img src="{{ asset('images/cupboard.jpg') }}" alt="cupboard" class="img-fluid w-100">
+        <div class="buffet-layout mt-3">
+            <div class="buffet-cupboard">
+                <div class="shelf" style="top: 76px; height: 155px; width: 964px;"></div>
+                <div class="shelf" style="top: 250px; height: 179px; width: 964px;"></div>
+                <div class="shelf" style="top: 451px; height: 165px; width: 964px;"></div>
             </div>
-            <div class="col-12 col-lg-2 d-flex flex-wrap gap-3 align-items-start">
-                <img src="{{ asset('images/bowl.png') }}" alt="bowl" class="img-fluid">
-                <img src="{{ asset('images/dish.png') }}" alt="dish" class="img-fluid">
-                <img src="{{ asset('images/soup.png') }}" alt="soup" class="img-fluid">
-                <img src="{{ asset('images/cup.png') }}" alt="cup" class="img-fluid">
+            <div class="buffet-items">
+                <img src="{{ asset('images/bowl.png') }}" alt="bowl">
+                <img src="{{ asset('images/dish.png') }}" alt="dish">
+                <img src="{{ asset('images/soup.png') }}" alt="soup">
+                <img src="{{ asset('images/cup.png') }}" alt="cup">
             </div>
         </div>
     </div>
