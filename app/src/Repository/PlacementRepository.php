@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Repository;
 
-use App\Entity\Dish;
 use App\Entity\Placement;
 use App\Entity\Shelf;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
@@ -97,38 +96,9 @@ final class PlacementRepository extends ServiceEntityRepository
         ];
     }
 
-    public function createPlacement(Shelf $shelf, Dish $dish, int $x, int $y): Placement
+    public function save(Placement $placement): void
     {
-        $placement = new Placement();
-        $placement->setShelf($shelf);
-        $placement->setDish($dish);
-        $placement->setX($x);
-        $placement->setY($y);
-        $placement->setWidth($dish->getWidth());
-        $placement->setHeight($dish->getHeight());
         $this->getEntityManager()->persist($placement);
-
-        return $placement;
-    }
-
-    public function createStackedPlacement(Shelf $shelf, Dish $dish, Placement $target): Placement
-    {
-        $placement = new Placement();
-        $placement->setShelf($shelf);
-        $placement->setDish($dish);
-        $placement->setX($target->getX());
-        $placement->setY($target->getY());
-        $placement->setWidth($dish->getWidth());
-        $placement->setHeight($dish->getHeight());
-        $placement->setStackId($target->getStackId());
-        $placement->setStackIndex($this->getNextStackIndex((int) $target->getStackId()));
-        $this->getEntityManager()->persist($placement);
-
-        return $placement;
-    }
-
-    public function flush(): void
-    {
         $this->getEntityManager()->flush();
     }
 

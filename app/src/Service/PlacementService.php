@@ -8,13 +8,15 @@ use App\Entity\Dish;
 use App\Entity\Placement;
 use App\Entity\Shelf;
 use App\Exception\CollisionException;
+use App\Factory\PlacementFactory;
 use App\Repository\PlacementRepository;
 use Doctrine\DBAL\Exception as DbalException;
 
 final class PlacementService
 {
     public function __construct(
-        private readonly PlacementRepository $placementRepository
+        private readonly PlacementRepository $placementRepository,
+        private readonly PlacementFactory $placementFactory
     ) {}
 
     /**
@@ -29,7 +31,7 @@ final class PlacementService
         }
 
         try {
-            $this->placementRepository->flush();
+            $this->placementRepository->save($placement);
         } catch (\Throwable $exception) {
             if ($this->isCollisionException($exception)) {
                 throw new CollisionException('Placement collides with existing items.', 0, $exception);
@@ -44,8 +46,9 @@ final class PlacementService
     public function placeDishOnShelf(Shelf $shelf, Dish $dish): ?Placement {
         $stackTarget = $this->placementRepository->findStackTargetForDishOnShelf($shelf->getId(), $dish->getId());
         if ($stackTarget !== null) {
-            $placement = $this->placementRepository->createStackedPlacement($shelf, $dish, $stackTarget);
-            $this->placementRepository->flush();
+            $stackIndex = $this->placementRepository->getNextStackIndex((int) $stackTarget->getStackId());
+            $placement = $this->placementFactory->createStacked($shelf, $dish, $stackTarget, $stackIndex);
+            $this->placementRepository->save($placement);
 
             return $placement;
         }
@@ -68,10 +71,10 @@ final class PlacementService
             return null;
         }
 
-        $placement = $this->placementRepository->createPlacement($shelf, $dish, $coords['x'], $coords['y']);
+        $placement = $this->placementFactory->create($shelf, $dish, $coords['x'], $coords['y']);
 
         try {
-            $this->placementRepository->flush();
+            $this->placementRepository->save($placement);
         } catch (\Throwable $exception) {
             $this->placementRepository->detach($placement);
 
@@ -87,8 +90,8 @@ final class PlacementService
                     return null;
                 }
 
-                $placement = $this->placementRepository->createPlacement($shelf, $dish, $coords['x'], $coords['y']);
-                $this->placementRepository->flush();
+                $placement = $this->placementFactory->create($shelf, $dish, $coords['x'], $coords['y']);
+                $this->placementRepository->save($placement);
 
                 return $placement;
             }
