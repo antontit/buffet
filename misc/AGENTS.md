@@ -8,7 +8,7 @@
 * адмінкою, яка дозволяє **керувати полицями, посудом, розміщенням** і **стопками тарілок**
 * позиції предметів **вільні (не клітинки)**, **без ротації**
 * підтримка переміщення предметів **клавіатурою (як у грі)**
-* колізії: предмети **не можуть перекриватися** в межах однієї полиці та виходити за межі полиці
+* колізії: предмети **не можуть перекриватися** в межах однієї полиці та **виходити за межі полиці**
 
 ### 2) Основні принципи
 
@@ -31,7 +31,7 @@
 
 * **Shelf**: `{id, name, width, height}`
 * **Dish**: `{id, name, type, image, width, height}`
-* **Placement**: `{id, shelfId, dishId, x, y, w, h, z, stackId?, stackIndex?}`
+* **Placement**: `{id, shelfId, dishId, x, y, width, height, stackId?, stackIndex?}`
 
 Визначення:
 
@@ -60,7 +60,7 @@
   * репозиторії Doctrine/SQL
   * реалізація колізій:
 
-    * Postgres: GiST + EXCLUDE constraint (preferred)
+    * Postgres: GiST + EXCLUDE constraint
     * fallback: SELECT collision + транзакція + lock shelf (FOR UPDATE)
 
 #### 5.2 Frontend modules
