@@ -32,11 +32,11 @@ class Placement
     #[ORM\Column(type: 'float')]
     private float $y;
 
-    #[ORM\Column(type: 'float')]
-    private float $width;
+    #[ORM\Column(type: 'integer')]
+    private int $width;
 
-    #[ORM\Column(type: 'float')]
-    private float $height;
+    #[ORM\Column(type: 'integer')]
+    private int $height;
 
     #[ORM\Column(type: 'integer', nullable: true)]
     private ?int $stackId = null;
@@ -97,24 +97,24 @@ class Placement
         return $this;
     }
 
-    public function getWidth(): float
+    public function getWidth(): int
     {
         return $this->width;
     }
 
-    public function setWidth(float $width): self
+    public function setWidth(int $width): self
     {
         $this->width = $width;
 
         return $this;
     }
 
-    public function getHeight(): float
+    public function getHeight(): int
     {
         return $this->height;
     }
 
-    public function setHeight(float $height): self
+    public function setHeight(int $height): self
     {
         $this->height = $height;
 
