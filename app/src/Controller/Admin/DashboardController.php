@@ -19,12 +19,6 @@ class DashboardController extends AbstractDashboardController
         return $this->render('admin/buffet.html.twig');
     }
 
-    #[Route('/admin/dishes', name: 'admin_dishes')]
-    public function dishes(): Response
-    {
-        return $this->render('admin/dishes.html.twig');
-    }
-
     public function configureDashboard(): Dashboard
     {
         return Dashboard::new()
@@ -34,6 +28,5 @@ class DashboardController extends AbstractDashboardController
     public function configureMenuItems(): iterable
     {
         yield MenuItem::linkToDashboard('Buffet', 'fa fa-cutlery');
-        yield MenuItem::linkToRoute('Dishes', 'fa fa-plate-wheat', 'admin_dishes');
     }
 }
