@@ -4,6 +4,7 @@ RUN apk add --no-cache \
     icu-dev \
     libzip-dev \
     oniguruma-dev \
+    postgresql-dev \
     linux-headers \
     $PHPIZE_DEPS \
     curl
@@ -12,7 +13,8 @@ RUN docker-php-ext-install -j$(nproc) \
     ctype \
     intl \
     opcache \
-    pdo_mysql \
+    pgsql \
+    pdo_pgsql \
     zip
 
 # Xdebug (явная версия и неинтерактивный режим)

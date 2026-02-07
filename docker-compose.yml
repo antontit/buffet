@@ -16,27 +16,26 @@ services:
     volumes:
       - ./:/var/www/html
     depends_on:
-      - mariadb
+      - postgres
     environment:
       XDEBUG_MODE: "develop,debug"
       XDEBUG_CONFIG: "client_host=host.docker.internal client_port=9003"
       PHP_IDE_CONFIG: "serverName=symfony"
-      # DB host: mariadb (from this compose)
-      DATABASE_URL: "mysql://symfony:symfony@mariadb:3306/symfony?serverVersion=mariadb-11.8.5&charset=utf8mb4"
+      # DB host: postgres (from this compose)
+      DATABASE_URL: "postgresql://symfony:symfony@postgres:5432/symfony?serverVersion=16&charset=utf8"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  mariadb:
-    image: mariadb:11
+  postgres:
+    image: postgres:16-alpine
     environment:
-      MARIADB_ROOT_PASSWORD: root
-      MARIADB_DATABASE: symfony
-      MARIADB_USER: symfony
-      MARIADB_PASSWORD: symfony
+      POSTGRES_DB: symfony
+      POSTGRES_USER: symfony
+      POSTGRES_PASSWORD: symfony
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mariadb_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
 
 volumes:
-  mariadb_data:
+  postgres_data:
