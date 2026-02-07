@@ -12,11 +12,11 @@ use App\Factory\PlacementFactory;
 use App\Repository\PlacementRepository;
 use Doctrine\DBAL\Exception as DbalException;
 
-final class PlacementService
+final readonly class PlacementService
 {
     public function __construct(
-        private readonly PlacementRepository $placementRepository,
-        private readonly PlacementFactory $placementFactory
+        private PlacementRepository $placementRepository,
+        private PlacementFactory $placementFactory
     ) {}
 
     /**
