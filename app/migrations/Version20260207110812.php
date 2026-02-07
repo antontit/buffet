@@ -26,6 +26,15 @@ final class Version20260207110812 extends AbstractMigration
         $this->addSql('CREATE TABLE messenger_messages (id BIGINT AUTO_INCREMENT NOT NULL, body LONGTEXT NOT NULL, headers LONGTEXT NOT NULL, queue_name VARCHAR(190) NOT NULL, created_at DATETIME NOT NULL, available_at DATETIME NOT NULL, delivered_at DATETIME DEFAULT NULL, INDEX IDX_75EA56E0FB7336F0E3BD61CE16BA31DBBF396750 (queue_name, available_at, delivered_at, id), PRIMARY KEY (id)) DEFAULT CHARACTER SET utf8mb4');
         $this->addSql('ALTER TABLE placement ADD CONSTRAINT FK_48DB750E7C12FBC0 FOREIGN KEY (shelf_id) REFERENCES shelf (id) ON DELETE CASCADE');
         $this->addSql('ALTER TABLE placement ADD CONSTRAINT FK_48DB750E148EB0CB FOREIGN KEY (dish_id) REFERENCES dish (id) ON DELETE CASCADE');
+        $this->addSql(<<<'SQL'
+            ALTER TABLE placement
+            ADD CONSTRAINT placement_no_overlap
+            EXCLUDE USING gist (
+                shelf_id WITH =,
+                (COALESCE(stack_id, id)) WITH <>,
+                (box(point(x, y), point(x + width, y + height))) WITH &&
+            )
+            SQL);
     }
 
     public function down(Schema $schema): void
@@ -33,6 +42,7 @@ final class Version20260207110812 extends AbstractMigration
         // this down() migration is auto-generated, please modify it to your needs
         $this->addSql('ALTER TABLE placement DROP FOREIGN KEY FK_48DB750E7C12FBC0');
         $this->addSql('ALTER TABLE placement DROP FOREIGN KEY FK_48DB750E148EB0CB');
+        $this->addSql('ALTER TABLE placement DROP CONSTRAINT IF EXISTS placement_no_overlap');
         $this->addSql('DROP TABLE dish');
         $this->addSql('DROP TABLE placement');
         $this->addSql('DROP TABLE shelf');
