@@ -5,6 +5,16 @@
 {% block head_stylesheets %}
     {{ parent() }}
     <link rel="stylesheet" href="{{ asset('styles/buffet.css') }}">
+    <style>
+        {% for shelf in shelves %}
+        .shelf[data-shelf-id="{{ shelf.id }}"] {
+            top: {{ shelf.y }}px;
+            left: {{ shelf.x }}px;
+            width: {{ shelf.width }}px;
+            height: {{ shelf.height }}px;
+        }
+        {% endfor %}
+    </style>
 {% endblock %}
 
 {% block main %}
@@ -13,9 +23,9 @@
         <p>Welcome to the Buffet admin. Use the menu to manage dishes and review updates.</p>
         <div class="buffet-layout mt-3">
             <div class="buffet-cupboard">
-                <div class="shelf" style="top: 76px; left: 88px; height: 155px; width: 964px;"></div>
-                <div class="shelf" style="top: 250px; left: 88px; height: 179px; width: 964px;"></div>
-                <div class="shelf" style="top: 451px; left: 88px; height: 165px; width: 964px;"></div>
+                {% for shelf in shelves %}
+                    <div class="shelf" data-shelf-id="{{ shelf.id }}"></div>
+                {% endfor %}
             </div>
             <div class="buffet-items">
                 <img src="{{ asset('images/bowl.png') }}" alt="bowl">
