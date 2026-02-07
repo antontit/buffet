@@ -6,6 +6,16 @@
     <div class="content-panel">
         <h2 class="h4 mb-3">Overview</h2>
         <p>Welcome to the Buffet admin. Use the menu to manage dishes and review updates.</p>
-        <img src="{{ asset('images/cupboard.jpg') }}" alt="Cupboard" class="img-fluid mt-3">
+        <div class="row g-3 mt-3">
+            <div class="col-12 col-lg-10">
+                <img src="{{ asset('images/cupboard.jpg') }}" alt="cupboard" class="img-fluid w-100">
+            </div>
+            <div class="col-12 col-lg-2 d-flex flex-wrap gap-3 align-items-start">
+                <img src="{{ asset('images/bowl.png') }}" alt="bowl" class="img-fluid">
+                <img src="{{ asset('images/dish.png') }}" alt="dish" class="img-fluid">
+                <img src="{{ asset('images/soup.png') }}" alt="soup" class="img-fluid">
+                <img src="{{ asset('images/cup.png') }}" alt="cup" class="img-fluid">
+            </div>
+        </div>
     </div>
 {% endblock %}
