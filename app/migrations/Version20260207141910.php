@@ -20,10 +20,10 @@ final class Version20260207141910 extends AbstractMigration
         $this->skipIf($isExist, 'Shelves already exist.');
 
         $this->addSql(<<<'SQL'
-            INSERT INTO shelf (name, width, height) VALUES
-                ('Shelf 1', 1000, 600),
-                ('Shelf 2', 1000, 600),
-                ('Shelf 3', 1000, 600)
+            INSERT INTO shelf (name, width, height, x, y) VALUES
+                ('Shelf 1', 964, 155, 88, 76),
+                ('Shelf 2', 964, 179, 88, 250),
+                ('Shelf 3', 964, 165, 88, 451)
             SQL);
     }
 
@@ -32,8 +32,6 @@ final class Version20260207141910 extends AbstractMigration
         $this->addSql(<<<'SQL'
             DELETE FROM shelf
             WHERE name IN ('Shelf 1', 'Shelf 2', 'Shelf 3')
-              AND width = 1000
-              AND height = 600
             SQL);
     }
 }

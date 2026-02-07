@@ -23,6 +23,12 @@ class Shelf
     #[ORM\Column(type: 'integer')]
     private int $height;
 
+    #[ORM\Column(type: 'integer')]
+    private int $x;
+
+    #[ORM\Column(type: 'integer')]
+    private int $y;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -60,6 +66,30 @@ class Shelf
     public function setHeight(int $height): self
     {
         $this->height = $height;
+
+        return $this;
+    }
+
+    public function getX(): int
+    {
+        return $this->x;
+    }
+
+    public function setX(int $x): self
+    {
+        $this->x = $x;
+
+        return $this;
+    }
+
+    public function getY(): int
+    {
+        return $this->y;
+    }
+
+    public function setY(int $y): self
+    {
+        $this->y = $y;
 
         return $this;
     }

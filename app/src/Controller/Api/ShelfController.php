@@ -36,6 +36,8 @@ final class ShelfController
                 'name' => $shelf->getName(),
                 'width' => $shelf->getWidth(),
                 'height' => $shelf->getHeight(),
+                'x' => $shelf->getX(),
+                'y' => $shelf->getY(),
             ],
             'placements' => array_map(
                 static function (\App\Entity\Placement $placement): array {
