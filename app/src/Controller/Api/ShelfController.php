@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Controller\Api;
 
+use App\Repository\DishRepository;
 use App\Repository\PlacementRepository;
 use App\Repository\ShelfRepository;
+use App\Service\PlacementService;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
@@ -15,7 +18,9 @@ final class ShelfController
 {
     public function __construct(
         private readonly ShelfRepository $shelfRepository,
-        private readonly PlacementRepository $placementRepository
+        private readonly PlacementRepository $placementRepository,
+        private readonly DishRepository $dishRepository,
+        private readonly PlacementService $placementService
     ) {
     }
 
@@ -67,5 +72,65 @@ final class ShelfController
         ];
 
         return new JsonResponse($payload, Response::HTTP_OK);
+    }
+
+    #[Route('/{id}/placements', name: 'api_shelves_add_placement', methods: ['POST'])]
+    public function addPlacement(int $id, Request $request): JsonResponse
+    {
+        try {
+            $payload = $request->toArray();
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Invalid JSON payload'], Response::HTTP_BAD_REQUEST);
+        }
+
+        if (!isset($payload['shelfId'], $payload['dishId'])) {
+            return new JsonResponse(['error' => 'Missing shelfId or dishId'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $shelfId = $payload['shelfId'];
+        $dishId = $payload['dishId'];
+        if ((!is_int($shelfId) && !ctype_digit((string) $shelfId))
+            || (!is_int($dishId) && !ctype_digit((string) $dishId))
+        ) {
+            return new JsonResponse(['error' => 'shelfId and dishId must be integers'], Response::HTTP_BAD_REQUEST);
+        }
+
+        if ((int) $shelfId !== $id) {
+            return new JsonResponse(['error' => 'shelfId does not match route id'], Response::HTTP_BAD_REQUEST);
+        }
+
+        /** @var \App\Entity\Shelf $shelf */
+        $shelf = $this->shelfRepository->find($id);
+        if ($shelf === null) {
+            return new JsonResponse(['error' => 'Shelf not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        /** @var \App\Entity\Dish $dish */
+        $dish = $this->dishRepository->find((int) $dishId);
+        if ($dish === null) {
+            return new JsonResponse(['error' => 'Dish not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        $placement = $this->placementService->placeDishOnShelf($shelf, $dish);
+        if ($placement === null) {
+            return new JsonResponse(
+                ['error' => 'No space available'],
+                Response::HTTP_CONFLICT,
+                ['X-No-Space' => '1']
+            );
+        }
+
+        return new JsonResponse(
+            [
+                'id' => $placement->getId(),
+                'shelfId' => $placement->getShelf()->getId(),
+                'dishId' => $placement->getDish()->getId(),
+                'x' => $placement->getX(),
+                'y' => $placement->getY(),
+                'width' => $placement->getWidth(),
+                'height' => $placement->getHeight(),
+            ],
+            Response::HTTP_CREATED
+        );
     }
 }
