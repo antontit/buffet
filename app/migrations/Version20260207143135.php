@@ -21,9 +21,9 @@ final class Version20260207143135 extends AbstractMigration
 
         $this->addSql(<<<'SQL'
             INSERT INTO dish (name, type, image, width, height, is_stacked) VALUES
-                ('Bowl', 'bowl', 'images/bowl.png', 200, 200, FALSE),
+                ('Bowl', 'bowl', 'images/bowl.png', 200, 200, TRUE),
                 ('Cup', 'cup', 'images/cup.png', 150, 200, FALSE),
-                ('Dish', 'dish', 'images/dish.png', 250, 250, FALSE),
+                ('Dish', 'dish', 'images/dish.png', 250, 250, TRUE),
                 ('Soup', 'soup', 'images/soup.png', 250, 200, FALSE)
             SQL);
     }
