@@ -29,8 +29,8 @@
 
 Сутності:
 
-* **Shelf**: `{id, name, width, height, ...}`
-* **Dish**: `{id, name, type, image, defaultWidth, defaultHeight, ...}`
+* **Shelf**: `{id, name, width, height}`
+* **Dish**: `{id, name, type, image, width, height}`
 * **Placement**: `{id, shelfId, dishId, x, y, w, h, z, stackId?, stackIndex?}`
 
 Визначення:
@@ -81,7 +81,6 @@
 * **Collision on frontend**
 
   * MVP: O(n) AABB
-  * optional: `rbush` як spatial index (“GiST-like” на фронті)
 * **Sync**
 
   * debounce commit to backend
@@ -98,21 +97,16 @@
 Поведінка:
 
 * при колізії: бекенд повертає **409 Conflict**
-* при виході за межі: **422 Unprocessable Entity** (або 409 — але краще 422)
+* при виході за межі: **422 Unprocessable Entity**
 
 ### 7) Колізії: стратегія “швидко + правильно”
 
 * UI перевіряє колізію локально (миттєвий feedback).
 * Бекенд **обов’язково** перевіряє перед збереженням.
-* Якщо Postgres:
-
+* Postgres:
   * використовувати `rect box` (generated) + `GiST` + `EXCLUDE`
   * тоді collision-check = просто UPDATE, а БД відмовляє при конфлікті.
-* Якщо не Postgres:
-
-  * collision-check SQL `SELECT 1 ... LIMIT 1`
-  * транзакція + `SELECT shelf FOR UPDATE` щоб уникнути race.
-
+  
 ### 8) Стопки: стратегія MVP
 
 * У `placements` додати `stackId` nullable та `stackIndex`.
