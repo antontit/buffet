@@ -27,11 +27,11 @@ class Placement
     #[ORM\JoinColumn(name: 'dish_id', referencedColumnName: 'id', nullable: false, onDelete: 'CASCADE')]
     private Dish $dish;
 
-    #[ORM\Column(type: 'float')]
-    private float $x;
+    #[ORM\Column(type: 'integer')]
+    private int $x;
 
-    #[ORM\Column(type: 'float')]
-    private float $y;
+    #[ORM\Column(type: 'integer')]
+    private int $y;
 
     #[ORM\Column(type: 'integer')]
     private int $width;
@@ -74,24 +74,24 @@ class Placement
         return $this;
     }
 
-    public function getX(): float
+    public function getX(): int
     {
         return $this->x;
     }
 
-    public function setX(float $x): self
+    public function setX(int $x): self
     {
         $this->x = $x;
 
         return $this;
     }
 
-    public function getY(): float
+    public function getY(): int
     {
         return $this->y;
     }
 
-    public function setY(float $y): self
+    public function setY(int $y): self
     {
         $this->y = $y;
 
