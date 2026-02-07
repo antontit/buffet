@@ -17,6 +17,9 @@ final class PlacementService
     ) {
     }
 
+    /**
+     * @throw CollisionException
+     */
     public function updatePosition(Placement $placement, int $x, int $y, ?Shelf $shelf): Placement
     {
         $placement->setX($x);
