@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Repository;
 
+use App\Entity\Dish;
 use App\Entity\Placement;
 use App\Entity\Shelf;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
@@ -52,5 +53,113 @@ final class PlacementRepository extends ServiceEntityRepository
             ->fetchOne('SELECT COALESCE(MAX(stack_id), 0) + 1 FROM placement');
 
         return (int) $value;
+    }
+
+    /**
+     * @return array{x:int, y:int}|null
+     */
+    public function findFirstFreeSpot(int $shelfId, int $maxX, int $maxY, int $width, int $height): ?array
+    {
+        $sql = <<<SQL
+            WITH candidates AS (
+                SELECT x, y
+                FROM generate_series(0, :maxX) AS x
+                CROSS JOIN generate_series(0, :maxY) AS y
+            )
+            SELECT c.x, c.y
+            FROM candidates c
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM placement p
+                WHERE p.shelf_id = :shelfId
+                  AND box(point(c.x, c.y), point(c.x + :width, c.y + :height))
+                      && box(point(p.x, p.y), point(p.x + p.width, p.y + p.height))
+            )
+            ORDER BY c.y, c.x
+            LIMIT 1
+            SQL;
+
+        $row = $this->getEntityManager()->getConnection()->fetchAssociative($sql, [
+            'maxX' => $maxX,
+            'maxY' => $maxY,
+            'shelfId' => $shelfId,
+            'width' => $width,
+            'height' => $height,
+        ]);
+
+        if ($row === false) {
+            return null;
+        }
+
+        return [
+            'x' => (int) $row['x'],
+            'y' => (int) $row['y'],
+        ];
+    }
+
+    public function createPlacement(Shelf $shelf, Dish $dish, int $x, int $y): Placement
+    {
+        $placement = new Placement();
+        $placement->setShelf($shelf);
+        $placement->setDish($dish);
+        $placement->setX($x);
+        $placement->setY($y);
+        $placement->setWidth($dish->getWidth());
+        $placement->setHeight($dish->getHeight());
+        $this->getEntityManager()->persist($placement);
+
+        return $placement;
+    }
+
+    public function createStackedPlacement(Shelf $shelf, Dish $dish, Placement $target): Placement
+    {
+        $placement = new Placement();
+        $placement->setShelf($shelf);
+        $placement->setDish($dish);
+        $placement->setX($target->getX());
+        $placement->setY($target->getY());
+        $placement->setWidth($dish->getWidth());
+        $placement->setHeight($dish->getHeight());
+        $placement->setStackId($target->getStackId());
+        $placement->setStackIndex($this->getNextStackIndex((int) $target->getStackId()));
+        $this->getEntityManager()->persist($placement);
+
+        return $placement;
+    }
+
+    public function flush(): void
+    {
+        $this->getEntityManager()->flush();
+    }
+
+    public function detach(object $entity): void
+    {
+        $this->getEntityManager()->detach($entity);
+    }
+
+    public function getNextStackIndex(int $stackId): int
+    {
+        $value = $this->getEntityManager()
+            ->getConnection()
+            ->fetchOne('SELECT COALESCE(MAX(stack_index), -1) + 1 FROM placement WHERE stack_id = :stackId', [
+                'stackId' => $stackId,
+            ]);
+
+        return (int) $value;
+    }
+
+    public function findStackTargetForDishOnShelf(int $shelfId, int $dishId): ?Placement
+    {
+        return $this->createQueryBuilder('p')
+            ->where('p.shelf = :shelfId')
+            ->andWhere('p.dish = :dishId')
+            ->andWhere('p.stackId IS NOT NULL')
+            ->setParameter('shelfId', $shelfId)
+            ->setParameter('dishId', $dishId)
+            ->orderBy('p.stackIndex', 'DESC')
+            ->addOrderBy('p.id', 'DESC')
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
     }
 }
