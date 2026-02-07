@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller\Admin;
 
+use App\Repository\DishRepository;
 use App\Repository\ShelfRepository;
 use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminDashboard;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Dashboard;
@@ -15,16 +16,19 @@ use Symfony\Component\HttpFoundation\Response;
 class DashboardController extends AbstractDashboardController
 {
     public function __construct(
-        private readonly ShelfRepository $shelfRepository
+        private readonly ShelfRepository $shelfRepository,
+        private readonly DishRepository $dishRepository
     ) {
     }
 
     public function index(): Response
     {
         $shelves = $this->shelfRepository->findBy([], ['id' => 'ASC']);
+        $dishes = $this->dishRepository->findBy([], ['id' => 'ASC']);
 
         return $this->render('admin/buffet.html.twig', [
             'shelves' => $shelves,
+            'dishes' => $dishes,
         ]);
     }
 

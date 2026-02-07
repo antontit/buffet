@@ -28,10 +28,9 @@
                 {% endfor %}
             </div>
             <div class="buffet-items">
-                <img src="{{ asset('images/bowl.png') }}" alt="bowl">
-                <img src="{{ asset('images/dish.png') }}" alt="dish">
-                <img src="{{ asset('images/soup.png') }}" alt="soup">
-                <img src="{{ asset('images/cup.png') }}" alt="cup">
+                {% for dish in dishes %}
+                    <img src="{{ asset(dish.image) }}" alt="{{ dish.name|e('html_attr') }}">
+                {% endfor %}
             </div>
         </div>
     </div>
