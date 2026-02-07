@@ -2,9 +2,10 @@
 
 namespace App\Entity;
 
+use App\Repository\ShelfRepository;
 use Doctrine\ORM\Mapping as ORM;
 
-#[ORM\Entity]
+#[ORM\Entity(repositoryClass: ShelfRepository::class)]
 #[ORM\Table(name: 'shelf')]
 class Shelf
 {

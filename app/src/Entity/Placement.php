@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Repository\PlacementRepository;
 use Doctrine\ORM\Mapping as ORM;
 
-#[ORM\Entity]
+#[ORM\Entity(repositoryClass: PlacementRepository::class)]
 #[ORM\Table(name: 'placement')]
 #[ORM\Index(columns: ['shelf_id'], name: 'idx_placement_shelf')]
 #[ORM\Index(columns: ['dish_id'], name: 'idx_placement_dish')]
