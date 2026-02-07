@@ -8,11 +8,11 @@ use App\Entity\Placement;
 use App\Repository\PlacementRepository;
 use Doctrine\ORM\EntityManagerInterface;
 
-final class StackService
+final readonly class StackService
 {
     public function __construct(
-        private readonly EntityManagerInterface $entityManager,
-        private readonly PlacementRepository $placementRepository
+        private EntityManagerInterface $entityManager,
+        private PlacementRepository $placementRepository
     ) {
     }
 
