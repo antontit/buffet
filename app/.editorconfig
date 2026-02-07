@@ -15,3 +15,10 @@ indent_size = 2
 
 [*.md]
 trim_trailing_whitespace = false
+
+[*.php]
+ij_php_align_multiline_parameters = false
+ij_php_method_parameters_wrap = on_every_item
+ij_php_method_parameters_new_line_after_left_paren = true
+ij_php_method_parameters_right_paren_on_new_line = true
+ij_php_method_brace_style = end_of_line
