@@ -96,16 +96,6 @@ final class PlacementRepository extends ServiceEntityRepository
         ];
     }
 
-    public function save(Placement $placement): void
-    {
-        $this->getEntityManager()->persist($placement);
-        $this->getEntityManager()->flush();
-    }
-
-    public function detach(object $entity): void
-    {
-        $this->getEntityManager()->detach($entity);
-    }
 
     public function getNextStackIndex(int $stackId): int
     {
@@ -131,5 +121,16 @@ final class PlacementRepository extends ServiceEntityRepository
             ->setMaxResults(1)
             ->getQuery()
             ->getOneOrNullResult();
+    }
+
+    public function save(Placement $placement): void
+    {
+        $this->getEntityManager()->persist($placement);
+        $this->getEntityManager()->flush();
+    }
+
+    public function detach(object $entity): void
+    {
+        $this->getEntityManager()->detach($entity);
     }
 }
