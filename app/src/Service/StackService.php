@@ -4,35 +4,25 @@ declare(strict_types=1);
 
 namespace App\Service;
 
-use App\Entity\Stack;
+use App\Entity\Dish;
 use App\Entity\Shelf;
+use App\Entity\Stack;
 use App\Exception\CollisionException;
 use App\Factory\StackFactory;
 use App\Repository\StackRepository;
 use Doctrine\DBAL\Exception as DbalException;
-use Doctrine\ORM\EntityManagerInterface;
 
 final readonly class StackService
 {
     private const SQLSTATE_EXCLUSION_VIOLATION = '23P01';
 
     public function __construct(
-        private EntityManagerInterface $entityManager,
         private StackRepository $stackRepository,
         private StackFactory $stackFactory
     ) {
     }
 
-    /**
-     * @return array{
-     *     target: Stack,
-     *     source: Stack|null,
-     *     movedCount: int,
-     *     sourceRemaining: int
-     * }
-     */
-    public function merge(Stack $source, Stack $target): array
-    {
+    public function merge(Stack $source, Stack $target): StackMergeResult {
         if ($source->getId() === $target->getId()) {
             throw new \InvalidArgumentException('Source and target must differ.');
         }
@@ -46,58 +36,36 @@ final readonly class StackService
             throw new \InvalidArgumentException('Target dish is not stackable.');
         }
 
-        $connection = $this->entityManager->getConnection();
-        $connection->beginTransaction();
+        $available = max(0, $limit - $target->getCount());
+        $movedCount = min($available, $source->getCount());
+
+        if ($movedCount === 0) {
+            return new StackMergeResult(0, $source->getCount(), $target, $source);
+        }
+
+        $target->setCount($target->getCount() + $movedCount);
+        $sourceRemaining = $source->getCount() - $movedCount;
 
         try {
-            $available = max(0, $limit - $target->getCount());
-            $movedCount = min($available, $source->getCount());
+            $result = $this->stackRepository->mergeStacks($movedCount, $sourceRemaining, $source, $target);
 
-            if ($movedCount === 0) {
-                $connection->commit();
-
-                return [
-                    'target' => $target,
-                    'source' => $source,
-                    'movedCount' => 0,
-                    'sourceRemaining' => $source->getCount(),
-                ];
-            }
-
-            $target->setCount($target->getCount() + $movedCount);
-            $sourceRemaining = $source->getCount() - $movedCount;
-
-            if ($sourceRemaining <= 0) {
-                $this->stackRepository->remove($source);
-                $source = null;
-                $sourceRemaining = 0;
-            } else {
-                $source->setCount($sourceRemaining);
-            }
-
-            $this->entityManager->flush();
-            $connection->commit();
-
-            return [
-                'target' => $target,
-                'source' => $source,
-                'movedCount' => $movedCount,
-                'sourceRemaining' => $sourceRemaining,
-            ];
+            return new StackMergeResult(
+                $result['movedCount'],
+                $result['sourceRemaining'],
+                $result['target'],
+                $result['source']
+            );
         } catch (\Throwable $exception) {
-            $connection->rollBack();
-            if ($this->isCollisionException($exception)) {
-                throw new CollisionException('Stack collides with existing items.', 0, $exception);
-            }
-            throw $exception;
+            $this->rethrowCollision($exception);
         }
+
+        throw new \RuntimeException('Unexpected merge failure.');
     }
 
-    public function removeOne(Stack $stack): Stack
-    {
+    public function unstackOneItem(Stack $stack): Stack {
         $current = $stack->getCount();
         if ($current <= 1) {
-            $this->stackRepository->remove($stack, true);
+            $this->stackRepository->remove($stack);
             return $stack;
         }
 
@@ -107,8 +75,7 @@ final readonly class StackService
         return $stack;
     }
 
-    public function move(Stack $stack, Shelf $shelf, int $x, int $y): Stack
-    {
+    public function move(int $x, int $y, Shelf $shelf, Stack $stack): Stack {
         $stack->setShelf($shelf);
         $stack->setX($x);
         $stack->setY($y);
@@ -117,25 +84,7 @@ final readonly class StackService
         return $stack;
     }
 
-    /**
-     * @throw CollisionException
-     */
-    public function updatePosition(Stack $stack, int $x, int $y, ?Shelf $shelf): Stack
-    {
-        $stack->setX($x);
-        $stack->setY(0);
-
-        if ($shelf !== null) {
-            $stack->setShelf($shelf);
-        }
-
-        $this->saveWithCollisionCheck($stack);
-
-        return $stack;
-    }
-
-    public function placeDishOnShelf(Shelf $shelf, \App\Entity\Dish $dish, int $x): ?Stack
-    {
+    public function placeDishOnShelf(int $x, Shelf $shelf, Dish $dish): ?Stack {
         $maxX = $shelf->getWidth() - $dish->getWidth();
         if ($maxX < 0) {
             return null;
@@ -143,31 +92,29 @@ final readonly class StackService
 
         $clampedX = max(0, min($x, $maxX));
 
-        return $this->placeOnSpecificX($shelf, $dish, $clampedX, $maxX);
+        return $this->placeOnSpecificX($clampedX, $maxX, $shelf, $dish);
     }
 
-    public function placeDishOnShelfStacked(Shelf $shelf, \App\Entity\Dish $dish, Stack $target): Stack
-    {
-        $this->assertStackable($shelf, $dish, $target);
+    public function addDish(Dish $dish, Stack $stack): Stack {
+        $this->assertStackable($stack->getShelf(), $dish, $stack);
 
         try {
-            return $this->stackRepository->transactional(function () use ($dish, $target): Stack {
-                $nextCount = $target->getCount() + 1;
+            return $this->stackRepository->transactional(function () use ($dish, $stack): Stack {
+                $nextCount = $stack->getCount() + 1;
                 if ($nextCount > $dish->getStackLimit()) {
                     throw new \InvalidArgumentException('Stack is full.');
                 }
-                $target->setCount($nextCount);
-                $this->stackRepository->save($target);
+                $stack->setCount($nextCount);
+                $this->stackRepository->save($stack, false);
 
-                return $target;
+                return $stack;
             });
         } catch (\Throwable $exception) {
             $this->rethrowCollision($exception);
         }
     }
 
-    private function assertStackable(Shelf $shelf, \App\Entity\Dish $dish, Stack $target): void
-    {
+    private function assertStackable(Shelf $shelf, Dish $dish, Stack $target): void {
         if ($dish->getStackLimit() <= 1) {
             throw new \InvalidArgumentException('Dish is not stackable.');
         }
@@ -181,8 +128,7 @@ final readonly class StackService
         }
     }
 
-    private function saveWithCollisionCheck(Stack $stack): void
-    {
+    private function saveWithCollisionCheck(Stack $stack): void {
         try {
             $this->stackRepository->save($stack);
         } catch (\Throwable $exception) {
@@ -190,8 +136,7 @@ final readonly class StackService
         }
     }
 
-    private function rethrowCollision(\Throwable $exception): void
-    {
+    private function rethrowCollision(\Throwable $exception): void {
         if ($this->isCollisionException($exception)) {
             throw new CollisionException('Stack collides with existing items.', 0, $exception);
         }
@@ -199,10 +144,9 @@ final readonly class StackService
         throw $exception;
     }
 
-    private function placeOnSpecificX(Shelf $shelf, \App\Entity\Dish $dish, int $x, int $maxX): ?Stack
-    {
+    private function placeOnSpecificX(int $x, int $maxX, Shelf $shelf, Dish $dish): ?Stack {
         $clampedX = max(0, min($x, $maxX));
-        $stack = $this->stackFactory->create($shelf, $dish, $clampedX, 0);
+        $stack = $this->stackFactory->create($clampedX, 0, $shelf, $dish);
 
         try {
             $this->saveWithCollisionCheck($stack);
@@ -214,8 +158,7 @@ final readonly class StackService
         return $stack;
     }
 
-    private function isCollisionException(\Throwable $exception): bool
-    {
+    private function isCollisionException(\Throwable $exception): bool {
         if ($exception instanceof DbalException && $exception->getSQLSTATE() === self::SQLSTATE_EXCLUSION_VIOLATION) {
             return true;
         }

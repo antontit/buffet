@@ -122,7 +122,7 @@ final class ShelfController
         $x = (int) $rawX;
 
         try {
-            $stack = $this->stackService->placeDishOnShelf($shelf, $dish, $x);
+            $stack = $this->stackService->placeDishOnShelf($x, $shelf, $dish);
         } catch (CollisionException) {
             return new JsonResponse(
                 ['error' => 'Collision detected'],

@@ -10,9 +10,9 @@ use App\Entity\Shelf;
 
 final class StackFactory
 {
-    public function create(Shelf $shelf, Dish $dish, int $x, int $y): Stack
+    public function create(int $x, int $y, Shelf $shelf, Dish $dish): Stack
     {
-         $stack = new Stack();
+        $stack = new Stack();
         $stack->setShelf($shelf);
         $stack->setDish($dish);
         $stack->setX($x);

@@ -88,12 +88,6 @@ final class StackRepository extends ServiceEntityRepository
         ];
     }
 
-    public function save(Stack $stack): void
-    {
-        $this->getEntityManager()->persist($stack);
-        $this->getEntityManager()->flush();
-    }
-
     /**
      * @template T
      * @param callable(): T $operation
@@ -116,17 +110,52 @@ final class StackRepository extends ServiceEntityRepository
         }
     }
 
+    /**
+     * @return array{movedCount:int, sourceRemaining:int, target:Stack, source:?Stack}
+     */
+    public function mergeStacks(int $movedCount, int $sourceRemaining, Stack $source, Stack $target): array {
+        $entityManager = $this->getEntityManager();
+
+        if ($sourceRemaining <= 0) {
+            $entityManager->remove($source);
+            $source = null;
+            $sourceRemaining = 0;
+        } else {
+            $source->setCount($sourceRemaining);
+        }
+
+        $this->getEntityManager()->persist($target);
+        if ($source instanceof Stack) {
+            $this->getEntityManager()->persist($source);
+        }
+        $this->getEntityManager()->flush();
+
+        return [
+            'movedCount' => $movedCount,
+            'sourceRemaining' => $sourceRemaining,
+            'target' => $target,
+            'source' => $source,
+        ];
+    }
+
     public function detach(object $entity): void
     {
         $this->getEntityManager()->detach($entity);
     }
 
-    public function remove(Stack $stack, bool $flush = false): void
-    {
-        $this->getEntityManager()->remove($stack);
 
+    public function save(Stack $stack, bool $flush = true): void
+    {
+        $this->getEntityManager()->persist($stack);
         if ($flush) {
             $this->getEntityManager()->flush();
         }
+    }
+
+
+    public function remove(Stack $stack): void
+    {
+        $this->getEntityManager()->remove($stack);
+        $this->getEntityManager()->flush();
     }
 }

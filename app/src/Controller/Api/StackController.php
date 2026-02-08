@@ -60,11 +60,11 @@ final class StackController
         }
 
         $payload = [
-            'targetId' => $result['target']->getId(),
-            'targetCount' => $result['target']->getCount(),
-            'sourceId' => $result['source']?->getId(),
-            'sourceRemainingCount' => $result['sourceRemaining'],
-            'movedCount' => $result['movedCount'],
+            'targetId' => $result->getTarget()->getId(),
+            'targetCount' => $result->getTarget()->getCount(),
+            'sourceId' => $result->getSource()?->getId(),
+            'sourceRemainingCount' => $result->getSourceRemaining(),
+            'movedCount' => $result->getMovedCount(),
         ];
 
         return new JsonResponse($payload, Response::HTTP_OK);
@@ -88,14 +88,14 @@ final class StackController
             return new JsonResponse(['error' => 'stackId must be an integer'], Response::HTTP_BAD_REQUEST);
         }
 
-        /** @var \App\Entity\Stack|null $placement */
-        $placement = $this->stackRepository->find((int) $stackId);
-        if ($placement === null) {
+        /** @var \App\Entity\Stack|null $stack */
+        $stack = $this->stackRepository->find((int) $stackId);
+        if ($stack === null) {
             return new JsonResponse(['error' => 'Stack not found'], Response::HTTP_NOT_FOUND);
         }
 
-        $beforeCount = $placement->getCount();
-        $this->stackService->removeOne($placement);
+        $beforeCount = $stack->getCount();
+        $this->stackService->unstackOneItem($stack);
 
         return new JsonResponse(
             [
@@ -137,13 +137,14 @@ final class StackController
             return new JsonResponse(['error' => 'Target stack not found'], Response::HTTP_NOT_FOUND);
         }
 
+        /** @var \App\Entity\Dish $dish */
         $dish = $this->dishRepository->find((int) $dishId);
         if ($dish === null) {
             return new JsonResponse(['error' => 'Dish not found'], Response::HTTP_NOT_FOUND);
         }
 
         try {
-            $placement = $this->stackService->placeDishOnShelfStacked($target->getShelf(), $dish, $target);
+            $placement = $this->stackService->addDish($dish, $target);
         } catch (\InvalidArgumentException $exception) {
             return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
         } catch (\App\Exception\CollisionException) {
@@ -152,8 +153,8 @@ final class StackController
 
         return new JsonResponse(
             [
-                'id' => $placement->getId(),
-                'count' => $placement->getCount(),
+                'id' => $target->getId(),
+                'count' => $target->getCount(),
             ],
             Response::HTTP_CREATED
         );
@@ -195,7 +196,7 @@ final class StackController
             return new JsonResponse(['error' => 'Stack not found'], Response::HTTP_NOT_FOUND);
         }
 
-        $stack = $this->stackService->move($stack, $shelf, (int) $x, (int) $y);
+        $stack = $this->stackService->move((int) $x, (int) $y, $shelf, $stack);
 
         return new JsonResponse(
             [
@@ -218,7 +219,7 @@ final class StackController
             return new JsonResponse(['error' => 'Stack not found'], Response::HTTP_NOT_FOUND);
         }
 
-        $this->stackRepository->remove($stack, true);
+        $this->stackRepository->remove($stack);
 
         return new JsonResponse(null, Response::HTTP_NO_CONTENT);
     }
