@@ -124,7 +124,7 @@
   transition: opacity 0.15s ease-in-out;
 }
 
-.placed-dish:hover .placed-delete {
+.stack-item:hover .placed-delete {
   opacity: 1;
 }
 
