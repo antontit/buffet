@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Repository\DishRepository;
-use App\Repository\StackRepository;
+use App\Service\BuffetLayoutBuilder;
 use App\Repository\ShelfRepository;
 use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminDashboard;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Dashboard;
@@ -19,7 +19,7 @@ class DashboardController extends AbstractDashboardController
     public function __construct(
         private readonly ShelfRepository $shelfRepository,
         private readonly DishRepository $dishRepository,
-        private readonly StackRepository $stackRepository
+        private readonly BuffetLayoutBuilder $buffetLayoutBuilder
     ) {
     }
 
@@ -28,29 +28,13 @@ class DashboardController extends AbstractDashboardController
         $shelves = $this->shelfRepository->findAllOrderedByIdAsc();
         $dishes = $this->dishRepository->findAllOrderedByIdAsc();
 
-        $placementsByShelf = [];
-        $stackGroupsByShelf = [];
-        foreach ($this->stackRepository->findAllWithDish() as $placement) {
-            $shelfId = $placement->getShelf()->getId();
-            if (!isset($placementsByShelf[$shelfId])) {
-                $placementsByShelf[$shelfId] = [];
-            }
-            $placementsByShelf[$shelfId][] = $placement;
-        }
-        foreach ($placementsByShelf as $shelfId => $placements) {
-            foreach ($placements as $placement) {
-                $stackGroupsByShelf[$shelfId][] = [
-                    'placement' => $placement,
-                    'count' => $placement->getCount(),
-                ];
-            }
-        }
+        $layout = $this->buffetLayoutBuilder->build();
 
         return $this->render('admin/buffet.html.twig', [
             'shelves' => $shelves,
             'dishes' => $dishes,
-            'placementsByShelf' => $placementsByShelf,
-            'stackGroupsByShelf' => $stackGroupsByShelf,
+            'placementsByShelf' => $layout['placementsByShelf'],
+            'stackGroupsByShelf' => $layout['stackGroupsByShelf'],
         ]);
     }
 
