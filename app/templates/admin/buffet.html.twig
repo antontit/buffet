@@ -32,9 +32,7 @@
                 {% for shelf in shelves %}
                     <div class="shelf" data-shelf-id="{{ shelf.id }}">
                         {% for placement in placementsByShelf[shelf.id]|default([]) %}
-                            <img
-                                src="{{ asset(placement.dish.image) }}"
-                                alt="{{ placement.dish.name }}"
+                            <div
                                 class="placed-dish"
                                 draggable="true"
                                 data-placement-id="{{ placement.id }}"
@@ -46,6 +44,9 @@
                                 data-height="{{ placement.height }}"
                                 style="left: {{ placement.x }}px; bottom: {{ placement.y }}px; width: {{ placement.width }}px; height: {{ placement.height }}px;"
                             >
+                                <img src="{{ asset(placement.dish.image) }}" alt="{{ placement.dish.name }}">
+                                <button type="button" class="placed-delete" aria-label="Delete dish">×</button>
+                            </div>
                         {% endfor %}
                     </div>
                 {% endfor %}
@@ -64,9 +65,6 @@
                         data-height="{{ dish.height }}"
                     >
                 {% endfor %}
-            </div>
-            <div class="buffet-trash" aria-label="Trash bin" title="Drop here to delete">
-                <span>Trash</span>
             </div>
         </div>
     </div>

@@ -2,7 +2,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const dishItems = document.querySelectorAll('[data-dish-id]');
   const shelves = document.querySelectorAll('.shelf[data-shelf-id]');
   const message = document.querySelector('.buffet-message');
-  const trash = document.querySelector('.buffet-trash');
   const state = {
     draggedPlacementId: null,
     draggedDishEl: null,
@@ -71,8 +70,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (ignorePlacementId && item.dataset.placementId === ignorePlacementId) {
       return false;
     }
-    const itemLeft = Number(item.style.left.replace('px', ''));
-    const itemBottom = Number(item.style.bottom.replace('px', ''));
+      const itemLeft = Number(item.style.left.replace('px', ''));
+      const itemBottom = Number(item.style.bottom.replace('px', ''));
     const { width, height } = getElementSize(item);
     const itemRect = toRect(itemLeft, itemBottom, width, height);
 
@@ -132,24 +131,34 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const createPlacedElement = (sourceDishEl, payload) => {
-    const placed = document.createElement('img');
-    placed.src = sourceDishEl.dataset.image || sourceDishEl.src;
-    placed.alt = sourceDishEl.alt || 'Dish';
-    placed.className = 'placed-dish';
-    placed.draggable = true;
-    placed.dataset.placementId = payload.id;
-    placed.dataset.dishId = sourceDishEl.dataset.dishId || payload.dishId;
-    placed.dataset.dishType = sourceDishEl.dataset.dishType;
-    placed.dataset.isStacked = sourceDishEl.dataset.isStacked;
-    placed.dataset.image = placed.src;
-    placed.dataset.width = payload.width;
-    placed.dataset.height = payload.height;
-    placed.style.left = `${payload.x}px`;
-    placed.style.bottom = `${payload.y}px`;
-    placed.style.width = `${payload.width}px`;
-    placed.style.height = `${payload.height}px`;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'placed-dish';
+    wrapper.draggable = true;
+    wrapper.dataset.placementId = payload.id;
+    wrapper.dataset.dishId = sourceDishEl.dataset.dishId || payload.dishId;
+    wrapper.dataset.dishType = sourceDishEl.dataset.dishType;
+    wrapper.dataset.isStacked = sourceDishEl.dataset.isStacked;
+    wrapper.dataset.image = sourceDishEl.dataset.image || sourceDishEl.src;
+    wrapper.dataset.width = payload.width;
+    wrapper.dataset.height = payload.height;
+    wrapper.style.left = `${payload.x}px`;
+    wrapper.style.bottom = `${payload.y}px`;
+    wrapper.style.width = `${payload.width}px`;
+    wrapper.style.height = `${payload.height}px`;
 
-    return placed;
+    const img = document.createElement('img');
+    img.src = wrapper.dataset.image;
+    img.alt = sourceDishEl.alt || 'Dish';
+    wrapper.appendChild(img);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'placed-delete';
+    button.setAttribute('aria-label', 'Delete dish');
+    button.textContent = '×';
+    wrapper.appendChild(button);
+
+    return wrapper;
   };
 
   const handleStackDrop = async (shelf, targetDishEl) => {
@@ -324,56 +333,42 @@ document.addEventListener('DOMContentLoaded', () => {
     clearShelfState(shelf);
   };
 
-  const initTrash = () => {
-    if (!trash) {
+  const handleDeleteClick = async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || !target.classList.contains('placed-delete')) {
       return;
     }
 
-    trash.addEventListener('dragover', (event) => {
-      if (!state.draggedPlacementId) {
-        return;
-      }
-      event.preventDefault();
-      trash.classList.add('is-active');
-      event.dataTransfer.dropEffect = 'move';
-    });
+    event.preventDefault();
+    event.stopPropagation();
 
-    trash.addEventListener('dragleave', () => {
-      trash.classList.remove('is-active');
-    });
+    const placedEl = target.closest('.placed-dish');
+    if (!placedEl || !(placedEl instanceof HTMLElement)) {
+      return;
+    }
 
-    trash.addEventListener('drop', async (event) => {
-      event.preventDefault();
-      if (!state.draggedPlacementId) {
-        return;
-      }
+    const placementId = placedEl.dataset.placementId;
+    if (!placementId) {
+      return;
+    }
 
-      try {
-        const response = await fetch(`/api/placements/${state.draggedPlacementId}`, {
-          method: 'DELETE',
-        });
+    try {
+      const response = await fetch(`/api/placements/${placementId}`, {
+        method: 'DELETE',
+      });
 
-        if (!response.ok && response.status !== 404) {
-          setMessage('Failed to delete dish.');
-          return;
-        }
-
-        if (response.status === 204) {
-          const placedEl = document.querySelector(`[data-placement-id="${state.draggedPlacementId}"]`);
-          if (placedEl) {
-            placedEl.remove();
-          }
-        }
-
-        setMessage('');
-      } catch (error) {
+      if (!response.ok) {
         setMessage('Failed to delete dish.');
-      } finally {
-        trash.classList.remove('is-active');
-        state.draggedPlacementId = null;
-        state.draggedDishEl = null;
+        return;
       }
-    });
+
+      if (response.status === 204) {
+        placedEl.remove();
+        setMessage('');
+      }
+    } catch (error) {
+      setMessage('Failed to delete dish.');
+    }
   };
 
   dishItems.forEach((item) => {
@@ -399,5 +394,5 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  initTrash();
+  document.addEventListener('click', handleDeleteClick);
 });
