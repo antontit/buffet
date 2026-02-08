@@ -22,8 +22,8 @@ class Dish
     #[ORM\Column(type: 'string', length: 100)]
     private string $type;
 
-    #[ORM\Column(type: 'string', length: 255, nullable: true)]
-    private ?string $image = null;
+    #[ORM\Column(type: 'string', length: 255)]
+    private string $image;
 
     #[ORM\Column(type: 'integer')]
     private int $width;
@@ -63,12 +63,12 @@ class Dish
         return $this;
     }
 
-    public function getImage(): ?string
+    public function getImage(): string
     {
         return $this->image;
     }
 
-    public function setImage(?string $image): self
+    public function setImage(string $image): self
     {
         $this->image = $image;
 
