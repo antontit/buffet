@@ -20,11 +20,11 @@ final class Version20260207143135 extends AbstractMigration
         $this->skipIf($existing, 'Dishes already exist.');
 
         $this->addSql(<<<'SQL'
-            INSERT INTO dish (name, type, image, width, height, is_stacked) VALUES
-                ('Bowl', 'bowl', 'images/bowl.png', 200, 200, TRUE),
-                ('Cup', 'cup', 'images/cup.png', 150, 200, FALSE),
-                ('Dish', 'dish', 'images/dish.png', 250, 250, TRUE),
-                ('Soup', 'soup', 'images/soup.png', 250, 200, FALSE)
+            INSERT INTO dish (name, type, image, width, height, stack_limit) VALUES
+                ('Bowl', 'bowl', 'images/bowl.png', 140, 90, 10),
+                ('Cup', 'cup', 'images/cup.png', 110, 120, 1),
+                ('Dish', 'dish', 'images/dish.png', 160, 100, 10),
+                ('Soup', 'soup', 'images/soup.png', 150, 90, 1)
             SQL);
     }
 
