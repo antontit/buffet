@@ -31,31 +31,36 @@
             <div class="buffet-cupboard">
                 {% for shelf in shelves %}
                     <div class="shelf" data-shelf-id="{{ shelf.id }}">
-                        {% for placement in placementsByShelf[shelf.id]|default([]) %}
+                        {% for group in stackGroupsByShelf[shelf.id]|default([]) %}
+                            {% set placement = group.placement %}
                             <div
-                                class="placed-dish"
+                                class="stack-item"
                                 draggable="true"
+                                id="{% if placement.stackId is not null %}stack-item-stack-{{ placement.stackId }}{% else %}stack-item-{{ placement.id }}{% endif %}"
                                 data-placement-id="{{ placement.id }}"
                                 data-dish-id="{{ placement.dish.id }}"
                                 data-dish-type="{{ placement.dish.type }}"
                                 data-is-stacked="{{ placement.dish.isStacked ? '1' : '0' }}"
                                 data-stack-id="{{ placement.stackId }}"
                                 data-stack-index="{{ placement.stackIndex }}"
+                                data-stack-count="{{ group.count }}"
                                 data-image="{{ asset(placement.dish.image) }}"
                                 data-width="{{ placement.width }}"
                                 data-height="{{ placement.height }}"
                                 style="left: {{ placement.x }}px; bottom: {{ placement.y }}px; width: {{ placement.width }}px; height: {{ placement.height }}px;"
                             >
-                                <img src="{{ asset(placement.dish.image) }}" alt="{{ placement.dish.name }}">
+                                <div class="placed-dish">
+                                    <img src="{{ asset(placement.dish.image) }}" alt="{{ placement.dish.name }}">
+                                </div>
                                 <div
                                     class="stack-badge"
                                     data-stack-badge
-                                    style="{% if placement.stackId is null or (stackMeta[placement.stackId].count ?? 0) < 2 or (stackMeta[placement.stackId].topId ?? null) != placement.id %}display:none;{% endif %}"
-                                >{{ stackMeta[placement.stackId].count ?? '' }}</div>
+                                    style="{% if placement.stackId is null or (group.count ?? 0) < 2 %}display:none;{% endif %}"
+                                >{{ group.count }}</div>
                                 <div
                                     class="stack-controls"
                                     data-stack-controls
-                                    style="{% if placement.stackId is null or (stackMeta[placement.stackId].count ?? 0) < 2 or (stackMeta[placement.stackId].topId ?? null) != placement.id %}display:none;{% endif %}"
+                                    style="{% if placement.stackId is null or (group.count ?? 0) < 2 %}display:none;{% endif %}"
                                 >
                                     <button type="button" class="stack-add" aria-label="Add to stack" draggable="false">+</button>
                                     <button type="button" class="stack-remove" aria-label="Remove from stack" draggable="false">-</button>

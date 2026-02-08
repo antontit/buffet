@@ -111,10 +111,13 @@ final class StackController
             return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_NOT_FOUND);
         }
 
+        $top = $this->placementRepository->findTopOfStack((int) $stackId);
+
         return new JsonResponse(
             [
                 'stackId' => (int) $stackId,
                 'removedId' => $placement->getId(),
+                'topId' => $top?->getId(),
             ],
             Response::HTTP_OK
         );
