@@ -77,6 +77,47 @@ final class ShelfController
     #[Route('/{id}/stacks', name: 'api_shelves_add_stack', methods: ['POST'])]
     public function addStack(int $id, Request $request): JsonResponse
     {
+        $validation = $this->validateAddStackRequest($request, $id);
+        if ($validation instanceof JsonResponse) {
+            return $validation;
+        }
+        ['shelf' => $shelf, 'dish' => $dish, 'x' => $x] = $validation;
+
+        try {
+            $stack = $this->stackService->placeDishOnShelf($x, $shelf, $dish);
+        } catch (CollisionException) {
+            return new JsonResponse(
+                ['error' => 'Collision detected'],
+                Response::HTTP_CONFLICT
+            );
+        }
+        if ($stack === null) {
+            return new JsonResponse(
+                ['error' => 'No space available'],
+                Response::HTTP_CONFLICT
+            );
+        }
+
+        return new JsonResponse(
+            [
+                'id' => $stack->getId(),
+                'shelfId' => $stack->getShelf()->getId(),
+                'dishId' => $stack->getDish()->getId(),
+                'x' => $stack->getX(),
+                'y' => $stack->getY(),
+                'width' => $stack->getWidth(),
+                'height' => $stack->getHeight(),
+                'count' => $stack->getCount(),
+            ],
+            Response::HTTP_CREATED
+        );
+    }
+
+    /**
+     * @return array{shelf: \App\Entity\Shelf, dish: \App\Entity\Dish, x: int}|\Symfony\Component\HttpFoundation\JsonResponse
+     */
+    private function validateAddStackRequest(Request $request, int $id): array|JsonResponse
+    {
         try {
             $payload = $request->toArray();
         } catch (\Throwable) {
@@ -119,37 +160,11 @@ final class ShelfController
         if (!is_int($rawX) && !ctype_digit((string) $rawX)) {
             return new JsonResponse(['error' => 'x must be an integer'], Response::HTTP_BAD_REQUEST);
         }
-        $x = (int) $rawX;
 
-        try {
-            $stack = $this->stackService->placeDishOnShelf($x, $shelf, $dish);
-        } catch (CollisionException) {
-            return new JsonResponse(
-                ['error' => 'Collision detected'],
-                Response::HTTP_CONFLICT,
-                ['X-No-Space' => '1']
-            );
-        }
-        if ($stack === null) {
-            return new JsonResponse(
-                ['error' => 'No space available'],
-                Response::HTTP_CONFLICT,
-                ['X-No-Space' => '1']
-            );
-        }
-
-        return new JsonResponse(
-            [
-                'id' => $stack->getId(),
-                'shelfId' => $stack->getShelf()->getId(),
-                'dishId' => $stack->getDish()->getId(),
-                'x' => $stack->getX(),
-                'y' => $stack->getY(),
-                'width' => $stack->getWidth(),
-                'height' => $stack->getHeight(),
-                'count' => $stack->getCount(),
-            ],
-            Response::HTTP_CREATED
-        );
+        return [
+            'shelf' => $shelf,
+            'dish' => $dish,
+            'x' => (int) $rawX,
+        ];
     }
 }
