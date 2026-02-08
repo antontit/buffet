@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Repository\DishRepository;
+use App\Repository\PlacementRepository;
 use App\Repository\ShelfRepository;
 use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminDashboard;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Dashboard;
@@ -17,7 +18,8 @@ class DashboardController extends AbstractDashboardController
 {
     public function __construct(
         private readonly ShelfRepository $shelfRepository,
-        private readonly DishRepository $dishRepository
+        private readonly DishRepository $dishRepository,
+        private readonly PlacementRepository $placementRepository
     ) {
     }
 
@@ -25,10 +27,19 @@ class DashboardController extends AbstractDashboardController
     {
         $shelves = $this->shelfRepository->findBy([], ['id' => 'ASC']);
         $dishes = $this->dishRepository->findBy([], ['id' => 'ASC']);
+        $placementsByShelf = [];
+        foreach ($this->placementRepository->findAllWithDish() as $placement) {
+            $shelfId = $placement->getShelf()->getId();
+            if (!isset($placementsByShelf[$shelfId])) {
+                $placementsByShelf[$shelfId] = [];
+            }
+            $placementsByShelf[$shelfId][] = $placement;
+        }
 
         return $this->render('admin/buffet.html.twig', [
             'shelves' => $shelves,
             'dishes' => $dishes,
+            'placementsByShelf' => $placementsByShelf,
         ]);
     }
 

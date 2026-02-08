@@ -24,30 +24,99 @@
             const dishItems = document.querySelectorAll('[data-dish-id]');
             const shelves = document.querySelectorAll('.shelf[data-shelf-id]');
             const message = document.querySelector('.buffet-message');
+            let draggedPlacementId = null;
 
-            dishItems.forEach((item) => {
+            const bindDragSource = (item) => {
                 item.addEventListener('dragstart', (event) => {
+                    if (item.dataset.placementId) {
+                        draggedPlacementId = item.dataset.placementId;
+                        event.dataTransfer.setData('text/plain', '');
+                        event.dataTransfer.effectAllowed = 'move';
+                        return;
+                    }
+
                     event.dataTransfer.setData('text/plain', item.dataset.dishId);
                     event.dataTransfer.effectAllowed = 'copy';
                 });
+                item.addEventListener('dragend', () => {
+                    draggedPlacementId = null;
+                });
+            };
+
+            dishItems.forEach((item) => {
+                bindDragSource(item);
             });
 
             shelves.forEach((shelf) => {
                 shelf.addEventListener('dragover', (event) => {
                     event.preventDefault();
-                    event.dataTransfer.dropEffect = 'copy';
+                    event.dataTransfer.dropEffect = draggedPlacementId ? 'move' : 'copy';
                 });
 
                 shelf.addEventListener('drop', async (event) => {
                     event.preventDefault();
-                    const dishId = event.dataTransfer.getData('text/plain');
-                    if (!dishId) {
-                        return;
-                    }
-
                     const shelfId = shelf.dataset.shelfId;
+                    const shelfRect = shelf.getBoundingClientRect();
+                    const dropX = Math.round(event.clientX - shelfRect.left);
+                    const dropYFromBottom = Math.round(shelfRect.bottom - event.clientY);
 
                     try {
+                        if (draggedPlacementId) {
+                            const placedEl = document.querySelector(`[data-placement-id="${draggedPlacementId}"]`);
+                            if (!placedEl) {
+                                draggedPlacementId = null;
+                                return;
+                            }
+
+                            const width = placedEl.getBoundingClientRect().width;
+                            const height = placedEl.getBoundingClientRect().height;
+                            const clampedX = Math.max(0, Math.min(Math.round(dropX), shelfRect.width - width));
+                            const clampedY = Math.max(0, Math.min(Math.round(dropYFromBottom - height), shelfRect.height - height));
+
+                            const response = await fetch(`/api/placements/${draggedPlacementId}`, {
+                                method: 'PATCH',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    shelfId: Number(shelfId),
+                                    x: clampedX,
+                                    y: clampedY,
+                                }),
+                            });
+
+                            if (!response.ok) {
+                                if (response.status === 409) {
+                                    if (message) {
+                                        message.textContent = 'Collision detected.';
+                                    }
+                                    draggedPlacementId = null;
+                                    return;
+                                }
+
+                                if (message) {
+                                    message.textContent = 'Failed to move dish.';
+                                }
+                                draggedPlacementId = null;
+                                return;
+                            }
+
+                            placedEl.style.left = `${clampedX}px`;
+                            placedEl.style.bottom = `${clampedY}px`;
+                            shelf.appendChild(placedEl);
+
+                            draggedPlacementId = null;
+                            if (message) {
+                                message.textContent = '';
+                            }
+                            return;
+                        }
+
+                        const dishId = event.dataTransfer.getData('text/plain');
+                        if (!dishId) {
+                            return;
+                        }
+
                         const response = await fetch(`/api/shelves/${shelfId}/placements`, {
                             method: 'POST',
                             headers: {
@@ -83,11 +152,15 @@
                         placed.src = dishItem.dataset.image;
                         placed.alt = dishItem.alt || 'Dish';
                         placed.className = 'placed-dish';
+                        placed.draggable = true;
+                        placed.dataset.placementId = payload.id;
+                        placed.dataset.dishId = dishId;
                         placed.style.left = `${payload.x}px`;
-                        placed.style.top = `${payload.y}px`;
+                        placed.style.bottom = `${payload.y}px`;
                         placed.style.width = `${payload.width}px`;
                         placed.style.height = `${payload.height}px`;
                         shelf.appendChild(placed);
+                        bindDragSource(placed);
 
                         if (message) {
                             message.textContent = '';
@@ -111,7 +184,19 @@
         <div class="buffet-layout mt-3">
             <div class="buffet-cupboard">
                 {% for shelf in shelves %}
-                    <div class="shelf" data-shelf-id="{{ shelf.id }}"></div>
+                    <div class="shelf" data-shelf-id="{{ shelf.id }}">
+                        {% for placement in placementsByShelf[shelf.id]|default([]) %}
+                            <img
+                                src="{{ asset(placement.dish.image) }}"
+                                alt="{{ placement.dish.name }}"
+                                class="placed-dish"
+                                draggable="true"
+                                data-placement-id="{{ placement.id }}"
+                                data-dish-id="{{ placement.dish.id }}"
+                                style="left: {{ placement.x }}px; bottom: {{ placement.y }}px; width: {{ placement.width }}px; height: {{ placement.height }}px;"
+                            >
+                        {% endfor %}
+                    </div>
                 {% endfor %}
             </div>
             <div class="buffet-items">

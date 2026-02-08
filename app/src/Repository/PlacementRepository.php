@@ -34,6 +34,21 @@ final class PlacementRepository extends ServiceEntityRepository
     /**
      * @return list<Placement>
      */
+    public function findAllWithDish(): array
+    {
+        return $this->createQueryBuilder('p')
+            ->leftJoin('p.dish', 'd')
+            ->addSelect('d')
+            ->leftJoin('p.shelf', 's')
+            ->addSelect('s')
+            ->orderBy('p.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * @return list<Placement>
+     */
     public function findByStackId(int $stackId): array
     {
         return $this->createQueryBuilder('p')
