@@ -185,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return true;
       }
 
+      const sourceStackId = state.draggedDishEl?.dataset.stackId || null;
       const response = await fetch('/api/stacks/merge', {
         method: 'POST',
         headers: {
@@ -207,12 +208,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const sourcePlacement = payload.placements.find(
         (p) => String(p.id) === String(state.draggedPlacementId)
       );
-      if (sourcePlacement && state.draggedDishEl) {
+      if (resolvedStackId && state.draggedDishEl) {
+        const currentCount = getStackCount(String(resolvedStackId));
+        state.draggedDishEl.remove();
+        updateStackUI(String(resolvedStackId), currentCount + 1);
+      } else if (sourcePlacement && state.draggedDishEl) {
         state.draggedDishEl.style.left = `${sourcePlacement.x}px`;
         state.draggedDishEl.style.bottom = `${sourcePlacement.y}px`;
-      if (sourcePlacement.stackId || resolvedStackId) {
-        state.draggedDishEl.dataset.stackId = String(sourcePlacement.stackId || resolvedStackId);
-      }
+        if (sourcePlacement.stackId || resolvedStackId) {
+          state.draggedDishEl.dataset.stackId = String(sourcePlacement.stackId || resolvedStackId);
+        }
         if (sourcePlacement.stackIndex !== undefined) {
           state.draggedDishEl.dataset.stackIndex = String(sourcePlacement.stackIndex ?? '');
         }
@@ -223,8 +228,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (payload.placements) {
         applyStackPayload(payload.placements);
       }
-      if (resolvedStackId) {
-        updateStackUI(String(resolvedStackId));
+      if (sourceStackId && resolvedStackId && sourceStackId !== resolvedStackId) {
+        updateStackUI(sourceStackId, Math.max(0, getStackCount(sourceStackId) - 1));
       }
       return true;
     }
@@ -370,12 +375,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const payload = await response.json();
-    const placed = createPlacedElement(sourceDishEl, payload);
+    let placed = createPlacedElement(sourceDishEl, payload);
     shelf.appendChild(placed);
     bindDragSource(placed);
     setMessage('');
     if (payload.stackId) {
-      updateStackUI(payload.stackId);
+      const stackId = String(payload.stackId);
+      const stackElements = Array.from(shelf.querySelectorAll(`[data-stack-id="${stackId}"]`));
+      const existingStackEl = stackElements.find((el) => el !== placed) || null;
+      if (existingStackEl) {
+        const baseCount = Math.max(getStackCount(stackId), stackElements.length - 1);
+        placed.remove();
+        placed = existingStackEl;
+        updateStackUI(stackId, baseCount + 1);
+        return true;
+      }
+      updateStackUI(stackId);
     }
 
     return true;
@@ -487,7 +502,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (elements.length === 0) {
       return 0;
     }
-    const stored = Number(elements[0].dataset.stackCount || 0);
+    const stored = Math.max(
+      ...elements.map((el) => Number(el.dataset.stackCount || 0))
+    );
     return stored > 0 ? stored : elements.length;
   };
 
@@ -501,7 +518,9 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    const stored = Number(elements[0].dataset.stackCount || 0);
+    const stored = Math.max(
+      ...elements.map((el) => Number(el.dataset.stackCount || 0))
+    );
     const count = countOverride !== null ? countOverride : (stored > 0 ? stored : elements.length);
     elements.forEach((el) => {
       const badge = el.querySelector('[data-stack-badge]');

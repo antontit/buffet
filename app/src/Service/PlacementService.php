@@ -38,20 +38,28 @@ final readonly class PlacementService
     }
 
     public function placeDishOnShelf(Shelf $shelf, Dish $dish, int $x): ?Placement {
-        $stackTarget = $this->placementRepository->findStackTargetForDishOnShelf($shelf->getId(), $dish->getId());
-        if ($stackTarget !== null) {
-            $stackId = $stackTarget->getStackId();
-            if ($stackId !== null && $this->placementRepository->getStackCount((int) $stackId) < 10) {
-                return $this->placeOnExistingStack($shelf, $dish, $stackTarget);
-            }
-        }
+        $createStack = $dish->isStacked();
 
         $maxX = $shelf->getWidth() - $dish->getWidth();
         if ($maxX < 0) {
             return null;
         }
 
-        return $this->placeOnSpecificX($shelf, $dish, $x, $maxX);
+        $clampedX = max(0, min($x, $maxX));
+
+        $placement = $this->placeOnSpecificX($shelf, $dish, $clampedX, $maxX);
+        if ($placement === null) {
+            return null;
+        }
+
+        if ($createStack) {
+            $stackId = $this->placementRepository->getNextStackId();
+            $placement->setStackId($stackId);
+            $placement->setStackIndex(0);
+            $this->saveWithCollisionCheck($placement);
+        }
+
+        return $placement;
     }
 
     public function placeDishOnShelfStacked(Shelf $shelf, Dish $dish, Placement $target): Placement
@@ -133,7 +141,10 @@ final readonly class PlacementService
     }
 
     private function isCollisionException(\Throwable $exception): bool {
-        if ($exception instanceof DbalException && $exception->getSQLSTATE() === self::SQLSTATE_EXCLUSION_VIOLATION) {
+        if (
+            $exception instanceof DbalException
+            && $exception->getSQLSTATE() === self::SQLSTATE_EXCLUSION_VIOLATION
+        ) {
             return true;
         }
 

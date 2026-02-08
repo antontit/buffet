@@ -149,6 +149,39 @@ final class PlacementRepository extends ServiceEntityRepository
             ->getOneOrNullResult();
     }
 
+    public function findStackTargetForDishTypeOnShelf(int $shelfId, string $dishType): ?Placement
+    {
+        return $this->createQueryBuilder('p')
+            ->join('p.dish', 'd')
+            ->where('p.shelf = :shelfId')
+            ->andWhere('d.type = :type')
+            ->andWhere('p.stackId IS NOT NULL')
+            ->setParameter('shelfId', $shelfId)
+            ->setParameter('type', $dishType)
+            ->orderBy('p.stackIndex', 'DESC')
+            ->addOrderBy('p.id', 'DESC')
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
+    public function findStackTargetAtXForDishOnShelf(int $shelfId, int $dishId, int $x): ?Placement
+    {
+        return $this->createQueryBuilder('p')
+            ->where('p.shelf = :shelfId')
+            ->andWhere('p.dish = :dishId')
+            ->andWhere('p.stackId IS NOT NULL')
+            ->andWhere('p.x = :x')
+            ->setParameter('shelfId', $shelfId)
+            ->setParameter('dishId', $dishId)
+            ->setParameter('x', $x)
+            ->orderBy('p.stackIndex', 'DESC')
+            ->addOrderBy('p.id', 'DESC')
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
     public function findTopOfStack(int $stackId): ?Placement
     {
         return $this->createQueryBuilder('p')
