@@ -24,7 +24,7 @@ final readonly class PlacementService
      */
     public function updatePosition(Placement $placement, int $x, int $y, ?Shelf $shelf): Placement {
         $placement->setX($x);
-        $placement->setY($y);
+        $placement->setY(0);
 
         if ($shelf !== null) {
             $placement->setShelf($shelf);
@@ -35,16 +35,20 @@ final readonly class PlacementService
         return $placement;
     }
 
-    public function placeDishOnShelf(Shelf $shelf, Dish $dish): ?Placement {
+    public function placeDishOnShelf(Shelf $shelf, Dish $dish, ?int $x = null): ?Placement {
         $stackTarget = $this->placementRepository->findStackTargetForDishOnShelf($shelf->getId(), $dish->getId());
         if ($stackTarget !== null) {
             return $this->placeOnExistingStack($shelf, $dish, $stackTarget);
         }
 
         $maxX = $shelf->getWidth() - $dish->getWidth();
-        $maxY = $shelf->getHeight() - $dish->getHeight();
+        $maxY = 0;
         if ($maxX < 0 || $maxY < 0) {
             return null;
+        }
+
+        if ($x !== null) {
+            return $this->placeOnSpecificX($shelf, $dish, $x, $maxX);
         }
 
         return $this->placeOnFreeSpot($shelf, $dish, $maxX, $maxY);
@@ -58,15 +62,16 @@ final readonly class PlacementService
             return $this->placementRepository->transactional(function () use ($shelf, $dish, $target): Placement {
                 $stackId = $target->getStackId();
                 if ($stackId === null) {
-                    $stackId = $this->placementRepository->getNextStackId();
-                    $target->setStackId($stackId);
-                    $target->setStackIndex(0);
-                    $this->placementRepository->save($target);
-                }
+                $stackId = $this->placementRepository->getNextStackId();
+                $target->setStackId($stackId);
+                $target->setStackIndex(0);
+                $target->setY(0);
+                $this->placementRepository->save($target);
+            }
 
-                $stackIndex = $this->placementRepository->getNextStackIndex((int) $stackId);
-                $placement = $this->placementFactory->createStacked($shelf, $dish, $target, $stackIndex);
-                $this->placementRepository->save($placement);
+            $stackIndex = $this->placementRepository->getNextStackIndex((int) $stackId);
+            $placement = $this->placementFactory->createStacked($shelf, $dish, $target, $stackIndex);
+            $this->placementRepository->save($placement);
 
                 return $placement;
             });
@@ -92,6 +97,11 @@ final readonly class PlacementService
 
     private function placeOnExistingStack(Shelf $shelf, Dish $dish, Placement $stackTarget): Placement
     {
+        if ($stackTarget->getY() !== 0) {
+            $stackTarget->setY(0);
+            $this->placementRepository->save($stackTarget);
+        }
+
         $stackIndex = $this->placementRepository->getNextStackIndex((int) $stackTarget->getStackId());
         $placement = $this->placementFactory->createStacked($shelf, $dish, $stackTarget, $stackIndex);
         $this->placementRepository->save($placement);
@@ -178,5 +188,20 @@ final readonly class PlacementService
         }
 
         return false;
+    }
+
+    private function placeOnSpecificX(Shelf $shelf, Dish $dish, int $x, int $maxX): ?Placement
+    {
+        $clampedX = max(0, min($x, $maxX));
+        $placement = $this->placementFactory->create($shelf, $dish, $clampedX, 0);
+
+        try {
+            $this->saveWithCollisionCheck($placement);
+        } catch (CollisionException) {
+            $this->placementRepository->detach($placement);
+            return null;
+        }
+
+        return $placement;
     }
 }

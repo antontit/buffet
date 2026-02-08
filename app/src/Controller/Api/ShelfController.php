@@ -112,6 +112,15 @@ final class ShelfController
             return new JsonResponse(['error' => 'Dish not found'], Response::HTTP_NOT_FOUND);
         }
 
+        $x = null;
+        if (array_key_exists('x', $payload)) {
+            $rawX = $payload['x'];
+            if (!is_int($rawX) && !ctype_digit((string) $rawX)) {
+                return new JsonResponse(['error' => 'x must be an integer'], Response::HTTP_BAD_REQUEST);
+            }
+            $x = (int) $rawX;
+        }
+
         if (isset($payload['targetPlacementId'])) {
             $targetId = $payload['targetPlacementId'];
             if (!is_int($targetId) && !ctype_digit((string) $targetId)) {
@@ -136,7 +145,7 @@ final class ShelfController
                 return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
             }
         } else {
-            $placement = $this->placementService->placeDishOnShelf($shelf, $dish);
+            $placement = $this->placementService->placeDishOnShelf($shelf, $dish, $x);
         }
         if ($placement === null) {
             return new JsonResponse(

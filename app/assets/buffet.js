@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const dropX = Math.round(event.clientX - shelfRect.left);
     const dropYFromBottom = Math.round(shelfRect.bottom - event.clientY);
     const clampedX = Math.max(0, Math.min(Math.round(dropX), shelfRect.width - width));
-    const clampedY = Math.max(0, Math.min(Math.round(dropYFromBottom - height), shelfRect.height - height));
+    const clampedY = 0;
 
     return { x: clampedX, y: clampedY, shelfRect };
   };
@@ -282,6 +282,9 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     }
 
+    const { width, height } = getElementSize(sourceDishEl);
+    const { x } = getDropPoint(shelf, event, width, height);
+
     const response = await fetch(`/api/shelves/${shelf.dataset.shelfId}/placements`, {
       method: 'POST',
       headers: {
@@ -290,6 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
       body: JSON.stringify({
         shelfId: Number(shelf.dataset.shelfId),
         dishId: Number(dishId),
+        x,
       }),
     });
 
