@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return document.getElementById(elementId);
   };
 
-  const buildStackItemId = (placementId) => `stack-item-stack-${placementId}`;
+  const buildStackItemId = (stackId) => `stack-item-stack-${stackId}`;
 
   const parseTransferData = (event) => {
     const raw = event.dataTransfer.getData('text/plain');
@@ -449,22 +449,15 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    const placementId = placedEl.dataset.placementId;
-    if (!placementId) {
+    const stackId = placedEl.dataset.stackId || null;
+    if (!stackId) {
       return;
     }
-    const stackId = placedEl.dataset.stackId || null;
-    const stackCount = stackId ? getStackCount(stackId) : 0;
 
     try {
-      const response = await fetch(
-        stackId && stackCount > 1
-          ? `/api/stacks/${stackId}`
-          : `/api/placements/${placementId}`,
-        {
-          method: 'DELETE',
-        }
-      );
+      const response = await fetch(`/api/stacks/${stackId}`, {
+        method: 'DELETE',
+      });
 
       if (!response.ok) {
         setMessage('Failed to delete dish.');
@@ -472,14 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (response.status === 204) {
-        if (stackId && stackCount > 1) {
-          const stackEl = getStackItemById(`stack-item-stack-${stackId}`);
-          if (stackEl) {
-            stackEl.remove();
-          }
-        } else {
-          placedEl.remove();
-        }
+        placedEl.remove();
         setMessage('');
       }
     } catch (error) {
@@ -491,11 +477,15 @@ document.addEventListener('DOMContentLoaded', () => {
     bindDragSource(item);
   });
 
+  document.querySelectorAll('.stack-item').forEach((item) => {
+    bindDragSource(item);
+  });
+
   shelves.forEach((shelf) => {
     shelf.addEventListener('dragover', (event) => {
       event.preventDefault();
       const dragData = getDragData(event);
-      event.dataTransfer.dropEffect = dragData.placementId ? 'move' : 'copy';
+      event.dataTransfer.dropEffect = dragData.stackId ? 'move' : 'copy';
       updateCollisionState(shelf, event);
     });
 
@@ -571,10 +561,9 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    const placementId = placedEl.dataset.placementId;
     const dishId = placedEl.dataset.dishId;
     const stackId = placedEl.dataset.stackId || null;
-    if (!placementId) {
+    if (!stackId) {
       return;
     }
 
@@ -586,7 +575,7 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         body: JSON.stringify({
           dishId: Number(dishId),
-          targetPlacementId: Number(placementId),
+          targetStackId: Number(stackId),
         }),
       });
 
@@ -596,11 +585,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const payload = await response.json();
-      const stackId = placedEl.dataset.stackId;
-      if (stackId) {
-        placedEl.dataset.placementId = String(payload.id);
-        updateStackUI(String(stackId), Number(payload.count || getStackCount(String(stackId)) + 1));
-      }
+      updateStackUI(String(stackId), Number(payload.count || getStackCount(String(stackId)) + 1));
       setMessage('');
       return;
     }
