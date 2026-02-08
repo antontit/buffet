@@ -230,6 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const sourceEl = getStackItemById(dragData.elementId) || getStackItemById(`stack-item-${dragData.placementId}`) || getStackItemById(`stack-item-stack-${dragData.placementId}`);
       const sourceStackId = sourceEl?.dataset.stackId || null;
+      const sourceCount = sourceStackId ? getStackCount(sourceStackId) : 1;
       const response = await fetch('/api/stacks/merge', {
         method: 'POST',
         headers: {
@@ -250,14 +251,26 @@ document.addEventListener('DOMContentLoaded', () => {
       const payload = await response.json();
       const resolvedStackId = payload.stackId || targetDishEl.dataset.stackId;
       const stackKey = resolvedStackId ? String(resolvedStackId) : '';
+      const targetCount = stackKey ? getStackCount(stackKey) : 0;
+      const available = Math.max(0, 10 - targetCount);
+      const movedCount = sourceStackId === stackKey ? 0 : Math.min(available, sourceCount);
+      const sourceRemainingCount = sourceStackId && sourceStackId !== stackKey
+        ? Math.max(0, sourceCount - movedCount)
+        : sourceCount;
       const draggedEl = sourceEl || getStackItemById(`stack-item-${dragData.placementId}`);
-      if (draggedEl) {
+
+      if (sourceStackId && sourceStackId !== stackKey) {
+        if (sourceRemainingCount === 0 && draggedEl) {
+          draggedEl.remove();
+        } else if (sourceRemainingCount > 0) {
+          updateStackUI(sourceStackId, sourceRemainingCount);
+        }
+      } else if (!sourceStackId && draggedEl) {
         draggedEl.remove();
       }
-      if (stackKey) {
-        const currentCount = getStackCount(stackKey);
-        const nextCount = sourceStackId === stackKey ? currentCount : currentCount + 1;
-        updateStackUI(stackKey, nextCount);
+
+      if (stackKey && sourceStackId !== stackKey) {
+        updateStackUI(stackKey, targetCount + movedCount);
       }
 
       setMessage('');
@@ -266,9 +279,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (stackKey) {
           updateStackFromPlacements(stackKey, payload.placements);
         }
-      }
-      if (sourceStackId && resolvedStackId && sourceStackId !== resolvedStackId) {
-        updateStackUI(sourceStackId, Math.max(0, getStackCount(sourceStackId) - 1));
       }
       return true;
     }
