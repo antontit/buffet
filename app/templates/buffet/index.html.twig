@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Buffet</title>
+    <link rel="stylesheet" href="{{ asset('styles/buffet.css') }}">
+    <style>
+        {% for shelf in shelves %}
+        .shelf[data-shelf-id="{{ shelf.id }}"] {
+            top: {{ shelf.y }}px;
+            left: {{ shelf.x }}px;
+            width: {{ shelf.width }}px;
+            height: {{ shelf.height }}px;
+        }
+        {% endfor %}
+    </style>
+</head>
+<body style="background: #101213; color: #f2f0ea;">
+    <main class="content-panel">
+        <div class="mb-3">
+            <a href="/admin" style="color: #f2f0ea; text-decoration: underline;">Go to admin</a>
+        </div>
+        <h1 class="h4 mb-3">Buffet</h1>
+        <p class="mb-3">Current layout of the buffet.</p>
+        <div class="buffet-layout">
+            <div class="buffet-cupboard">
+                {% for shelf in shelves %}
+                    <div class="shelf" data-shelf-id="{{ shelf.id }}">
+                        {% for group in stackGroupsByShelf[shelf.id]|default([]) %}
+                            {% set placement = group.placement %}
+                            <div
+                                class="stack-item"
+                                id="stack-item-stack-{{ placement.id }}"
+                                style="left: {{ placement.x }}px; bottom: {{ placement.y }}px; width: {{ placement.width }}px; height: {{ placement.height }}px;"
+                            >
+                                <div class="placed-dish">
+                                    <img src="{{ asset(placement.dish.image) }}" alt="{{ placement.dish.name }}">
+                                </div>
+                                {% if (group.count ?? 0) > 1 %}
+                                    <div class="stack-badge">{{ group.count }}</div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </main>
+</body>
+</html>
