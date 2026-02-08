@@ -99,16 +99,14 @@ final readonly class StackService
         $this->assertStackable($stack->getShelf(), $dish, $stack);
 
         try {
-            return $this->stackRepository->transactional(function () use ($dish, $stack): Stack {
-                $nextCount = $stack->getCount() + 1;
-                if ($nextCount > $dish->getStackLimit()) {
-                    throw new \InvalidArgumentException('Stack is full.');
-                }
-                $stack->setCount($nextCount);
-                $this->stackRepository->save($stack, false);
+            $nextCount = $stack->getCount() + 1;
+            if ($nextCount > $dish->getStackLimit()) {
+                throw new \InvalidArgumentException('Stack is full.');
+            }
+            $stack->setCount($nextCount);
+            $this->stackRepository->save($stack);
 
-                return $stack;
-            });
+            return $stack;
         } catch (\Throwable $exception) {
             $this->rethrowCollision($exception);
         }

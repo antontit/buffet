@@ -153,8 +153,8 @@ final class StackController
 
         return new JsonResponse(
             [
-                'id' => $target->getId(),
-                'count' => $target->getCount(),
+                'id' => $placement->getId(),
+                'count' => $placement->getCount(),
             ],
             Response::HTTP_CREATED
         );

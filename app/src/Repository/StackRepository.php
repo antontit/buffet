@@ -144,12 +144,9 @@ final class StackRepository extends ServiceEntityRepository
     }
 
 
-    public function save(Stack $stack, bool $flush = true): void
-    {
+    public function save(Stack $stack): void {
         $this->getEntityManager()->persist($stack);
-        if ($flush) {
-            $this->getEntityManager()->flush();
-        }
+        $this->getEntityManager()->flush();
     }
 
 
