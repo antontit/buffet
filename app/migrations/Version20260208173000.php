@@ -7,11 +7,11 @@ namespace DoctrineMigrations;
 use Doctrine\DBAL\Schema\Schema;
 use Doctrine\Migrations\AbstractMigration;
 
-final class Version20260207155408 extends AbstractMigration
+final class Version20260208173000 extends AbstractMigration
 {
     public function getDescription(): string
     {
-        return 'Add GiST exclusion constraint for stack collisions (PostgreSQL only)';
+        return 'Add GiST exclusion constraint for stack collisions';
     }
 
     public function up(Schema $schema): void
