@@ -144,6 +144,28 @@ final class PlacementRepository extends ServiceEntityRepository
         $this->getEntityManager()->flush();
     }
 
+    /**
+     * @template T
+     * @param callable(): T $operation
+     * @return T
+     */
+    public function transactional(callable $operation)
+    {
+        $connection = $this->getEntityManager()->getConnection();
+        $connection->beginTransaction();
+
+        try {
+            $result = $operation();
+            $this->getEntityManager()->flush();
+            $connection->commit();
+
+            return $result;
+        } catch (\Throwable $exception) {
+            $connection->rollBack();
+            throw $exception;
+        }
+    }
+
     public function detach(object $entity): void
     {
         $this->getEntityManager()->detach($entity);

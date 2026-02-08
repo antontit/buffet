@@ -102,6 +102,45 @@ final readonly class PlacementService
         return $placement;
     }
 
+    public function placeDishOnShelfStacked(Shelf $shelf, Dish $dish, Placement $target): Placement
+    {
+        if (!$dish->isStacked()) {
+            throw new \InvalidArgumentException('Dish is not stackable.');
+        }
+
+        if ($target->getShelf()->getId() !== $shelf->getId()) {
+            throw new \InvalidArgumentException('Target shelf mismatch.');
+        }
+
+        if ($target->getDish()->getType() !== $dish->getType()) {
+            throw new \InvalidArgumentException('Dish types do not match.');
+        }
+
+        try {
+            return $this->placementRepository->transactional(function () use ($shelf, $dish, $target): Placement {
+                $stackId = $target->getStackId();
+                if ($stackId === null) {
+                    $stackId = $this->placementRepository->getNextStackId();
+                    $target->setStackId($stackId);
+                    $target->setStackIndex(0);
+                    $this->placementRepository->save($target);
+                }
+
+                $stackIndex = $this->placementRepository->getNextStackIndex((int) $stackId);
+                $placement = $this->placementFactory->createStacked($shelf, $dish, $target, $stackIndex);
+                $this->placementRepository->save($placement);
+
+                return $placement;
+            });
+        } catch (\Throwable $exception) {
+            if ($this->isCollisionException($exception)) {
+                throw new CollisionException('Placement collides with existing items.', 0, $exception);
+            }
+
+            throw $exception;
+        }
+    }
+
     private function isCollisionException(\Throwable $exception): bool {
         if ($exception instanceof DbalException && $exception->getSQLSTATE() === '23P01') {
             return true;

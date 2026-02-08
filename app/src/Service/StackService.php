@@ -34,6 +34,7 @@ final readonly class StackService
                 $targetStackId = $this->placementRepository->getNextStackId();
                 $target->setStackId($targetStackId);
                 $target->setStackIndex(0);
+                $this->entityManager->flush();
             }
 
             $this->detachFromOldStack($source, $targetStackId);
