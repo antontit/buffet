@@ -17,10 +17,97 @@
     </style>
 {% endblock %}
 
+{% block body_javascript %}
+    {{ parent() }}
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const dishItems = document.querySelectorAll('[data-dish-id]');
+            const shelves = document.querySelectorAll('.shelf[data-shelf-id]');
+            const message = document.querySelector('.buffet-message');
+
+            dishItems.forEach((item) => {
+                item.addEventListener('dragstart', (event) => {
+                    event.dataTransfer.setData('text/plain', item.dataset.dishId);
+                    event.dataTransfer.effectAllowed = 'copy';
+                });
+            });
+
+            shelves.forEach((shelf) => {
+                shelf.addEventListener('dragover', (event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = 'copy';
+                });
+
+                shelf.addEventListener('drop', async (event) => {
+                    event.preventDefault();
+                    const dishId = event.dataTransfer.getData('text/plain');
+                    if (!dishId) {
+                        return;
+                    }
+
+                    const shelfId = shelf.dataset.shelfId;
+
+                    try {
+                        const response = await fetch(`/api/shelves/${shelfId}/placements`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                shelfId: Number(shelfId),
+                                dishId: Number(dishId),
+                            }),
+                        });
+
+                        if (!response.ok) {
+                            if (response.status === 409) {
+                                if (message) {
+                                    message.textContent = 'No space available on this shelf.';
+                                }
+                                return;
+                            }
+
+                            if (message) {
+                                message.textContent = 'Failed to place dish.';
+                            }
+                            return;
+                        }
+
+                        const payload = await response.json();
+                        const dishItem = document.querySelector(`[data-dish-id="${dishId}"]`);
+                        if (!dishItem) {
+                            return;
+                        }
+
+                        const placed = document.createElement('img');
+                        placed.src = dishItem.dataset.image;
+                        placed.alt = dishItem.alt || 'Dish';
+                        placed.className = 'placed-dish';
+                        placed.style.left = `${payload.x}px`;
+                        placed.style.top = `${payload.y}px`;
+                        placed.style.width = `${payload.width}px`;
+                        placed.style.height = `${payload.height}px`;
+                        shelf.appendChild(placed);
+
+                        if (message) {
+                            message.textContent = '';
+                        }
+                    } catch (error) {
+                        if (message) {
+                            message.textContent = 'Failed to place dish.';
+                        }
+                    }
+                });
+            });
+        });
+    </script>
+{% endblock %}
+
 {% block main %}
     <div class="content-panel">
         <h2 class="h4 mb-3">Overview</h2>
         <p>Welcome to the Buffet admin. Use the menu to manage dishes and review updates.</p>
+        <div class="buffet-message" aria-live="polite"></div>
         <div class="buffet-layout mt-3">
             <div class="buffet-cupboard">
                 {% for shelf in shelves %}
@@ -29,7 +116,13 @@
             </div>
             <div class="buffet-items">
                 {% for dish in dishes %}
-                    <img src="{{ asset(dish.image) }}" alt="{{ dish.name }}">
+                    <img
+                        src="{{ asset(dish.image) }}"
+                        alt="{{ dish.name }}"
+                        draggable="true"
+                        data-dish-id="{{ dish.id }}"
+                        data-image="{{ asset(dish.image) }}"
+                    >
                 {% endfor %}
             </div>
         </div>
