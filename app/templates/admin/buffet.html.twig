@@ -19,276 +19,7 @@
 
 {% block body_javascript %}
     {{ parent() }}
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const dishItems = document.querySelectorAll('[data-dish-id]');
-            const shelves = document.querySelectorAll('.shelf[data-shelf-id]');
-            const message = document.querySelector('.buffet-message');
-            let draggedPlacementId = null;
-            let draggedDishEl = null;
-
-            const bindDragSource = (item) => {
-                item.addEventListener('dragstart', (event) => {
-                    if (item.dataset.placementId) {
-                        draggedPlacementId = item.dataset.placementId;
-                        draggedDishEl = item;
-                        event.dataTransfer.setData('text/plain', '');
-                        event.dataTransfer.effectAllowed = 'move';
-                        return;
-                    }
-
-                    event.dataTransfer.setData('text/plain', item.dataset.dishId);
-                    draggedDishEl = item;
-                    event.dataTransfer.effectAllowed = 'copy';
-                });
-                item.addEventListener('dragend', () => {
-                    draggedPlacementId = null;
-                    draggedDishEl = null;
-                });
-            };
-
-            dishItems.forEach((item) => {
-                bindDragSource(item);
-            });
-
-            shelves.forEach((shelf) => {
-                shelf.addEventListener('dragover', (event) => {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = draggedPlacementId ? 'move' : 'copy';
-                });
-
-                shelf.addEventListener('drop', async (event) => {
-                    event.preventDefault();
-                    const shelfId = shelf.dataset.shelfId;
-                    const shelfRect = shelf.getBoundingClientRect();
-                    const dropX = Math.round(event.clientX - shelfRect.left);
-                    const dropYFromBottom = Math.round(shelfRect.bottom - event.clientY);
-                    const targetDishEl = event.target.closest('.placed-dish');
-
-                    try {
-                        if (targetDishEl && draggedDishEl) {
-                            const targetIsStacked = targetDishEl.dataset.isStacked === '1';
-                            const draggedIsStacked = draggedDishEl.dataset.isStacked === '1';
-                            const sameType = targetDishEl.dataset.dishType === draggedDishEl.dataset.dishType;
-
-                            if (targetIsStacked && draggedIsStacked && sameType) {
-                                const targetPlacementId = targetDishEl.dataset.placementId;
-
-                                if (draggedPlacementId) {
-                                    if (draggedPlacementId === targetPlacementId) {
-                                        draggedPlacementId = null;
-                                        draggedDishEl = null;
-                                        return;
-                                    }
-
-                                    const response = await fetch('/api/stacks/merge', {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                        },
-                                        body: JSON.stringify({
-                                            sourcePlacementId: Number(draggedPlacementId),
-                                            targetPlacementId: Number(targetPlacementId),
-                                            position: 'top',
-                                        }),
-                                    });
-
-                                    if (!response.ok) {
-                                        if (message) {
-                                            message.textContent = 'Failed to stack dish.';
-                                        }
-                                        draggedPlacementId = null;
-                                        draggedDishEl = null;
-                                        return;
-                                    }
-
-                                    const payload = await response.json();
-                                    const sourcePlacement = payload.placements.find((p) => String(p.id) === String(draggedPlacementId));
-                                    if (sourcePlacement) {
-                                        draggedDishEl.style.left = `${sourcePlacement.x}px`;
-                                        draggedDishEl.style.bottom = `${sourcePlacement.y}px`;
-                                        shelf.appendChild(draggedDishEl);
-                                    }
-
-                                    draggedPlacementId = null;
-                                    draggedDishEl = null;
-                                    if (message) {
-                                        message.textContent = '';
-                                    }
-                                    return;
-                                }
-
-                                const dishId = draggedDishEl.dataset.dishId;
-                                const response = await fetch(`/api/shelves/${shelfId}/placements`, {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                    },
-                                    body: JSON.stringify({
-                                        shelfId: Number(shelfId),
-                                        dishId: Number(dishId),
-                                        targetPlacementId: Number(targetPlacementId),
-                                    }),
-                                });
-
-                                if (!response.ok) {
-                                    if (response.status === 409) {
-                                        if (message) {
-                                            message.textContent = 'No space available on this shelf.';
-                                        }
-                                        return;
-                                    }
-
-                                    if (message) {
-                                        message.textContent = 'Failed to stack dish.';
-                                    }
-                                    return;
-                                }
-
-                                const payload = await response.json();
-                                const placed = document.createElement('img');
-                                placed.src = draggedDishEl.dataset.image;
-                                placed.alt = draggedDishEl.alt || 'Dish';
-                                placed.className = 'placed-dish';
-                                placed.draggable = true;
-                                placed.dataset.placementId = payload.id;
-                                placed.dataset.dishId = dishId;
-                                placed.dataset.dishType = draggedDishEl.dataset.dishType;
-                                placed.dataset.isStacked = draggedDishEl.dataset.isStacked;
-                                placed.style.left = `${payload.x}px`;
-                                placed.style.bottom = `${payload.y}px`;
-                                placed.style.width = `${payload.width}px`;
-                                placed.style.height = `${payload.height}px`;
-                                shelf.appendChild(placed);
-                                bindDragSource(placed);
-
-                                if (message) {
-                                    message.textContent = '';
-                                }
-                                return;
-                            }
-                        }
-
-                        if (draggedPlacementId) {
-                            const placedEl = document.querySelector(`[data-placement-id="${draggedPlacementId}"]`);
-                            if (!placedEl) {
-                                draggedPlacementId = null;
-                                draggedDishEl = null;
-                                return;
-                            }
-
-                            const width = placedEl.getBoundingClientRect().width;
-                            const height = placedEl.getBoundingClientRect().height;
-                            const clampedX = Math.max(0, Math.min(Math.round(dropX), shelfRect.width - width));
-                            const clampedY = Math.max(0, Math.min(Math.round(dropYFromBottom - height), shelfRect.height - height));
-
-                            const response = await fetch(`/api/placements/${draggedPlacementId}`, {
-                                method: 'PATCH',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({
-                                    shelfId: Number(shelfId),
-                                    x: clampedX,
-                                    y: clampedY,
-                                }),
-                            });
-
-                            if (!response.ok) {
-                                if (response.status === 409) {
-                                    if (message) {
-                                        message.textContent = 'Collision detected.';
-                                    }
-                                    draggedPlacementId = null;
-                                    draggedDishEl = null;
-                                    return;
-                                }
-
-                                if (message) {
-                                    message.textContent = 'Failed to move dish.';
-                                }
-                                draggedPlacementId = null;
-                                draggedDishEl = null;
-                                return;
-                            }
-
-                            placedEl.style.left = `${clampedX}px`;
-                            placedEl.style.bottom = `${clampedY}px`;
-                            shelf.appendChild(placedEl);
-
-                            draggedPlacementId = null;
-                            draggedDishEl = null;
-                            if (message) {
-                                message.textContent = '';
-                            }
-                            return;
-                        }
-
-                        const dishId = event.dataTransfer.getData('text/plain');
-                        if (!dishId) {
-                            return;
-                        }
-
-                        const sourceDishEl = draggedDishEl || document.querySelector(`.buffet-items [data-dish-id="${dishId}"]`);
-                        if (!sourceDishEl) {
-                            return;
-                        }
-
-                        const response = await fetch(`/api/shelves/${shelfId}/placements`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                shelfId: Number(shelfId),
-                                dishId: Number(dishId),
-                            }),
-                        });
-
-                        if (!response.ok) {
-                            if (response.status === 409) {
-                                if (message) {
-                                    message.textContent = 'No space available on this shelf.';
-                                }
-                                return;
-                            }
-
-                            if (message) {
-                                message.textContent = 'Failed to place dish.';
-                            }
-                            return;
-                        }
-
-                        const payload = await response.json();
-                        const placed = document.createElement('img');
-                        placed.src = sourceDishEl.dataset.image || sourceDishEl.src;
-                        placed.alt = sourceDishEl.alt || 'Dish';
-                        placed.className = 'placed-dish';
-                        placed.draggable = true;
-                        placed.dataset.placementId = payload.id;
-                        placed.dataset.dishId = dishId;
-                        placed.dataset.dishType = sourceDishEl.dataset.dishType;
-                        placed.dataset.isStacked = sourceDishEl.dataset.isStacked;
-                        placed.dataset.image = placed.src;
-                        placed.style.left = `${payload.x}px`;
-                        placed.style.bottom = `${payload.y}px`;
-                        placed.style.width = `${payload.width}px`;
-                        placed.style.height = `${payload.height}px`;
-                        shelf.appendChild(placed);
-                        bindDragSource(placed);
-
-                        if (message) {
-                            message.textContent = '';
-                        }
-                    } catch (error) {
-                        if (message) {
-                            message.textContent = 'Failed to place dish.';
-                        }
-                    }
-                });
-            });
-        });
-    </script>
+    <script src="{{ asset('buffet.js') }}"></script>
 {% endblock %}
 
 {% block main %}
@@ -311,6 +42,8 @@
                                 data-dish-type="{{ placement.dish.type }}"
                                 data-is-stacked="{{ placement.dish.isStacked ? '1' : '0' }}"
                                 data-image="{{ asset(placement.dish.image) }}"
+                                data-width="{{ placement.width }}"
+                                data-height="{{ placement.height }}"
                                 style="left: {{ placement.x }}px; bottom: {{ placement.y }}px; width: {{ placement.width }}px; height: {{ placement.height }}px;"
                             >
                         {% endfor %}
@@ -327,8 +60,13 @@
                         data-dish-type="{{ dish.type }}"
                         data-is-stacked="{{ dish.isStacked ? '1' : '0' }}"
                         data-image="{{ asset(dish.image) }}"
+                        data-width="{{ dish.width }}"
+                        data-height="{{ dish.height }}"
                     >
                 {% endfor %}
+            </div>
+            <div class="buffet-trash" aria-label="Trash bin" title="Drop here to delete">
+                <span>Trash</span>
             </div>
         </div>
     </div>

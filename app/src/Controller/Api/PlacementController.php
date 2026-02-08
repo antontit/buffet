@@ -82,4 +82,18 @@ final class PlacementController
             Response::HTTP_OK
         );
     }
+
+    #[Route('/{id}', name: 'api_placements_delete', methods: ['DELETE'])]
+    public function delete(int $id): JsonResponse
+    {
+        /** @var \App\Entity\Placement $placement */
+        $placement = $this->placementRepository->find($id);
+        if ($placement === null) {
+            return new JsonResponse(null, Response::HTTP_NO_CONTENT);
+        }
+
+        $this->placementRepository->remove($placement, true);
+
+        return new JsonResponse(null, Response::HTTP_NO_CONTENT);
+    }
 }

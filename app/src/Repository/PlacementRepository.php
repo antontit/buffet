@@ -170,4 +170,13 @@ final class PlacementRepository extends ServiceEntityRepository
     {
         $this->getEntityManager()->detach($entity);
     }
+
+    public function remove(Placement $placement, bool $flush = false): void
+    {
+        $this->getEntityManager()->remove($placement);
+
+        if ($flush) {
+            $this->getEntityManager()->flush();
+        }
+    }
 }
