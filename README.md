@@ -1,50 +1,108 @@
-# Symfony Template (Docker)
+# Buffet
 
-Clean Symfony project template. Stack: **nginx**, **PHP-FPM**, **Xdebug**, **MariaDB**.
+Вебзастосунок для керування та перегляду розкладки страв на полицях буфету.
 
-## Quick start
+## Стек
+
+- Symfony (PHP)
+- PostgreSQL
+- Nginx + PHP-FPM (Docker)
+- Xdebug
+
+## Швидкий старт (Docker)
 
 ```bash
-# 1. Create Symfony project (one time)
+docker compose up -d
+```
+
+Після запуску:
+- Публічна сторінка: http://localhost:8082/buffet
+- Адмінка: http://localhost:8082/admin
+
+## Ініціалізація
+
+```bash
 chmod +x init-symfony.sh
 ./init-symfony.sh
-
-# 2. Start containers
-docker compose up -d
-
-# 3. Open in browser
-# http://localhost:8082
 ```
 
-## Without init script
+## База даних
 
-```bash
-docker compose up -d
-docker compose exec php composer create-project symfony/skeleton . --no-interaction
-docker compose exec php composer require webapp symfony/orm-pack
-```
-
-## Database
-
-- **Host:** `mariadb` (from php container) or `127.0.0.1` (from host)
-- **Port:** 3306
+- **Host:** `postgres` (з php-контейнера) або `127.0.0.1` (з хоста)
+- **Port:** 5432
 - **Database:** symfony
 - **User:** symfony
 - **Password:** symfony
 
-`DATABASE_URL` is set in `.env`.
+`DATABASE_URL` задано в `docker-compose.yml` і може бути перевизначено у `.env`.
 
-## Xdebug
+## API (стеки)
 
-- Port: **9003**
-- IDE key: **PHPSTORM**
-- Enable listener on port 9003 and set server `symfony` with path `/var/www/html`.
+Базовий шлях: `/api/stacks`
 
-## Commands
+- `POST /merge` — обʼєднати два стеки
+  - payload: `{ "sourceStackId": 1, "targetStackId": 2 }`
+- `POST /unstack` — зняти один елемент зі стеку
+  - payload: `{ "stackId": 1 }`
+- `POST /add` — додати страву до стеку
+  - payload: `{ "dishId": 1, "targetStackId": 2 }`
+- `PATCH /{stackId}` — перемістити стек
+  - payload: `{ "shelfId": 1, "x": 10, "y": 20 }`
+- `DELETE /{stackId}` — видалити стек
+
+## Архітектура
+
+- Контролери: `app/src/Controller` (адмінка, публічний перегляд, API).
+- Сервіси: `app/src/Service` (бізнес-логіка стеків і побудова розкладки).
+- Репозиторії: `app/src/Repository` (доступ до БД та перевірка колізій при збереженні).
+- Шаблони: `app/templates` (адмін і публічний інтерфейс).
+- Міграції: `app/migrations` (схема БД і обмеження на колізії).
+
+## Колізії (проблематика і реалізація)
+
+Проблема: під час розміщення або переміщення стеків на полицях елементи можуть накладатися один на одного. Це призводить до некоректної розкладки, коли дві позиції займають один і той самий простір.
+
+Рішення реалізоване на рівні БД:
+- У PostgreSQL використовується GiST exclusion constraint `stack_no_overlap`.
+- Обмеження забороняє перетин прямокутників всередині однієї полиці.
+- Прямокутник будується з координат `x`, `y`, `width`, `height`.
+
+Технічні деталі:
+- Міграція: `app/migrations/Version20260208173000.php` додає `btree_gist` і constraint `EXCLUDE USING gist (...)`.
+- При збереженні стеку репозиторій ловить SQLSTATE `23P01` і кидає `CollisionException`.
+- Контролери API повертають `409 Conflict` з повідомленням про колізію.
+
+## Схема БД
+
+### shelf
+- `id` (PK)
+- `name`
+- `width`, `height`
+- `x`, `y` (позиція полиці)
+
+### dish
+- `id` (PK)
+- `name`
+- `type`
+- `image`
+- `width`, `height`
+- `stack_limit`
+
+### stack
+- `id` (PK)
+- `shelf_id` (FK -> shelf.id, on delete cascade)
+- `dish_id` (FK -> dish.id, on delete cascade)
+- `x`, `y`
+- `width`, `height`
+- `count`
+- Indexes: `idx_stack_shelf`, `idx_stack_dish`
+- Constraint: `stack_no_overlap` (GiST exclusion, забороняє перетин в межах однієї полиці)
+
+## Корисні команди
 
 ```bash
-docker compose up -d          # Start
-docker compose down          # Stop
-docker compose exec php sh   # Shell in PHP container
+docker compose up -d
+docker compose down
+docker compose exec php sh
 docker compose exec php composer require <package>
 ```
