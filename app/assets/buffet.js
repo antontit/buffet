@@ -2,11 +2,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const dishItems = document.querySelectorAll('[data-dish-id]');
   const shelves = document.querySelectorAll('.shelf[data-shelf-id]');
   const message = document.querySelector('.buffet-message');
-  const state = {
-    draggedPlacementId: null,
-    draggedElementId: null,
-    draggedDishEl: null,
-  };
 
   const setMessage = (text) => {
     if (!message) {
@@ -22,6 +17,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const setShelfState = (shelf, isColliding) => {
     shelf.classList.toggle('is-colliding', isColliding);
     shelf.classList.toggle('is-available', !isColliding);
+  };
+
+  const getDragData = (event) => {
+    const transfer = parseTransferData(event);
+    const elementId = event.dataTransfer.getData('text/stack-item-id');
+    if (transfer.placementId) {
+      return { placementId: String(transfer.placementId), dishId: null, elementId: elementId || null };
+    }
+    if (transfer.dishId) {
+      return { placementId: null, dishId: String(transfer.dishId), elementId: null };
+    }
+    return { placementId: null, dishId: null, elementId: null };
   };
 
   const getStackItemById = (elementId) => {
@@ -109,21 +116,35 @@ document.addEventListener('DOMContentLoaded', () => {
   );
 
   const updateCollisionState = (shelf, event) => {
-    if (!state.draggedDishEl) {
+    const { placementId, dishId, elementId } = getDragData(event);
+    if (!placementId && !dishId) {
       clearShelfState(shelf);
       return;
     }
 
     const targetDishEl = event.target.closest('.stack-item');
-    if (isStackCompatible(targetDishEl, state.draggedDishEl)) {
+    if (targetDishEl && placementId) {
       setShelfState(shelf, false);
       return;
     }
 
-    const { width, height } = getElementSize(state.draggedDishEl);
+    const draggedEl = placementId
+      ? getStackItemById(elementId) || getStackItemById(`stack-item-${placementId}`) || getStackItemById(`stack-item-stack-${placementId}`)
+      : document.querySelector(`.buffet-items [data-dish-id="${dishId}"]`);
+    if (!draggedEl) {
+      clearShelfState(shelf);
+      return;
+    }
+
+    if (isStackCompatible(targetDishEl, draggedEl)) {
+      setShelfState(shelf, false);
+      return;
+    }
+
+    const { width, height } = getElementSize(draggedEl);
     const { x, y } = getDropPoint(shelf, event, width, height);
     const rect = toRect(x, y, width, height);
-    const overlap = computeOverlap(shelf, rect, state.draggedPlacementId);
+    const overlap = computeOverlap(shelf, rect, placementId);
 
     setShelfState(shelf, overlap);
   };
@@ -132,27 +153,18 @@ document.addEventListener('DOMContentLoaded', () => {
     item.addEventListener('dragstart', (event) => {
       const dragEl = item.closest('.stack-item') || item;
       if (dragEl.dataset.placementId) {
-        state.draggedPlacementId = dragEl.dataset.placementId;
-        state.draggedElementId = dragEl.id || null;
-        state.draggedDishEl = dragEl;
         event.dataTransfer.setData('text/plain', JSON.stringify({
           placementId: dragEl.dataset.placementId,
         }));
+        event.dataTransfer.setData('text/stack-item-id', dragEl.id || '');
         event.dataTransfer.effectAllowed = 'move';
         return;
       }
 
-      state.draggedDishEl = dragEl;
-      state.draggedElementId = dragEl.id || null;
       event.dataTransfer.setData('text/plain', JSON.stringify({
         dishId: dragEl.dataset.dishId,
       }));
       event.dataTransfer.effectAllowed = 'copy';
-    });
-    item.addEventListener('dragend', () => {
-      state.draggedPlacementId = null;
-      state.draggedElementId = null;
-      state.draggedDishEl = null;
     });
   };
 
@@ -208,22 +220,23 @@ document.addEventListener('DOMContentLoaded', () => {
     return wrapper;
   };
 
-  const handleStackDrop = async (shelf, targetDishEl) => {
+  const handleStackDrop = async (shelf, targetDishEl, dragData) => {
     const targetPlacementId = targetDishEl.dataset.placementId;
 
-    if (state.draggedPlacementId) {
-      if (state.draggedPlacementId === targetPlacementId) {
+    if (dragData.placementId) {
+      if (dragData.placementId === targetPlacementId) {
         return true;
       }
 
-      const sourceStackId = state.draggedDishEl?.dataset.stackId || null;
+      const sourceEl = getStackItemById(dragData.elementId) || getStackItemById(`stack-item-${dragData.placementId}`) || getStackItemById(`stack-item-stack-${dragData.placementId}`);
+      const sourceStackId = sourceEl?.dataset.stackId || null;
       const response = await fetch('/api/stacks/merge', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sourcePlacementId: Number(state.draggedPlacementId),
+          sourcePlacementId: Number(dragData.placementId),
           targetPlacementId: Number(targetPlacementId),
           position: 'top',
         }),
@@ -237,10 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const payload = await response.json();
       const resolvedStackId = payload.stackId || targetDishEl.dataset.stackId;
       const stackKey = resolvedStackId ? String(resolvedStackId) : '';
-      const sourcePlacement = payload.placements.find(
-        (p) => String(p.id) === String(state.draggedPlacementId)
-      );
-      const draggedEl = getStackItemById(state.draggedElementId);
+      const draggedEl = sourceEl || getStackItemById(`stack-item-${dragData.placementId}`);
       if (draggedEl) {
         draggedEl.remove();
       }
@@ -263,11 +273,11 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     }
 
-    if (!state.draggedDishEl) {
+    if (!dragData.dishId) {
       return true;
     }
 
-    const dishId = state.draggedDishEl.dataset.dishId;
+    const dishId = dragData.dishId;
     const response = await fetch('/api/stacks/add', {
       method: 'POST',
       headers: {
@@ -291,18 +301,21 @@ document.addEventListener('DOMContentLoaded', () => {
       targetDishEl.dataset.stackId = String(resolvedStackId);
       targetDishEl.dataset.stackIndex = targetDishEl.dataset.stackIndex || '0';
       targetDishEl.dataset.placementId = String(payload.id);
+      if (targetDishEl.id !== `stack-item-stack-${resolvedStackId}`) {
+        targetDishEl.id = `stack-item-stack-${resolvedStackId}`;
+      }
       updateStackUI(String(resolvedStackId), getStackCount(String(resolvedStackId)) + 1);
     }
 
     return true;
   };
 
-  const handleMoveDrop = async (shelf, event) => {
-    if (!state.draggedPlacementId) {
+  const handleMoveDrop = async (shelf, event, dragData) => {
+    if (!dragData.placementId) {
       return false;
     }
 
-    const placedEl = getStackItemById(state.draggedElementId);
+    const placedEl = getStackItemById(dragData.elementId) || getStackItemById(`stack-item-${dragData.placementId}`) || getStackItemById(`stack-item-stack-${dragData.placementId}`);
     if (!placedEl) {
       return true;
     }
@@ -340,7 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     }
 
-    const response = await fetch(`/api/placements/${state.draggedPlacementId}`, {
+    const response = await fetch(`/api/placements/${dragData.placementId}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
@@ -365,15 +378,13 @@ document.addEventListener('DOMContentLoaded', () => {
     return true;
   };
 
-  const handleCreateDrop = async (shelf, event) => {
-    const transferData = parseTransferData(event);
-    const dishId = transferData.dishId ? String(transferData.dishId) : '';
+  const handleCreateDrop = async (shelf, event, dragData) => {
+    const dishId = dragData.dishId ? String(dragData.dishId) : '';
     if (!dishId) {
       return false;
     }
 
-    const sourceDishEl = state.draggedDishEl
-      || document.querySelector(`.buffet-items [data-dish-id="${dishId}"]`);
+    const sourceDishEl = document.querySelector(`.buffet-items [data-dish-id="${dishId}"]`);
     if (!sourceDishEl) {
       return true;
     }
@@ -420,28 +431,25 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const handleShelfDrop = async (shelf, event) => {
-    const transferData = parseTransferData(event);
-    if (transferData.placementId) {
-      state.draggedPlacementId = String(transferData.placementId);
-    } else if (transferData.dishId && !state.draggedDishEl) {
-      state.draggedDishEl = document.querySelector(
-        `.buffet-items [data-dish-id="${transferData.dishId}"]`
-      );
-    }
-
+    const dragData = getDragData(event);
     const targetDishEl = event.target.closest('.stack-item');
-    if (isStackCompatible(targetDishEl, state.draggedDishEl)) {
-      await handleStackDrop(shelf, targetDishEl);
+    if (targetDishEl && (dragData.placementId || dragData.dishId)) {
+      const draggedEl = dragData.placementId
+        ? getStackItemById(dragData.elementId) || getStackItemById(`stack-item-${dragData.placementId}`) || getStackItemById(`stack-item-stack-${dragData.placementId}`)
+        : document.querySelector(`.buffet-items [data-dish-id="${dragData.dishId}"]`);
+      if (isStackCompatible(targetDishEl, draggedEl)) {
+        await handleStackDrop(shelf, targetDishEl, dragData);
+        clearShelfState(shelf);
+        return;
+      }
+    }
+
+    if (await handleMoveDrop(shelf, event, dragData)) {
       clearShelfState(shelf);
       return;
     }
 
-    if (await handleMoveDrop(shelf, event)) {
-      clearShelfState(shelf);
-      return;
-    }
-
-    await handleCreateDrop(shelf, event);
+    await handleCreateDrop(shelf, event, dragData);
     clearShelfState(shelf);
   };
 
@@ -483,9 +491,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (response.status === 204) {
         if (stackId && stackCount > 1) {
-          document
-            .querySelectorAll(`[data-stack-id="${stackId}"]`)
-            .forEach((el) => el.remove());
+          const stackEl = getStackItemById(`stack-item-stack-${stackId}`);
+          if (stackEl) {
+            stackEl.remove();
+          }
         } else {
           placedEl.remove();
         }
@@ -503,7 +512,8 @@ document.addEventListener('DOMContentLoaded', () => {
   shelves.forEach((shelf) => {
     shelf.addEventListener('dragover', (event) => {
       event.preventDefault();
-      event.dataTransfer.dropEffect = state.draggedPlacementId ? 'move' : 'copy';
+      const dragData = getDragData(event);
+      event.dataTransfer.dropEffect = dragData.placementId ? 'move' : 'copy';
       updateCollisionState(shelf, event);
     });
 
@@ -520,80 +530,55 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   const getStackCount = (stackId) => {
-    const stackKey = String(stackId);
-    const elements = Array.from(document.querySelectorAll(`[data-stack-id="${stackKey}"]`));
-    if (elements.length === 0) {
+    if (!stackId) {
       return 0;
     }
-    const stored = Math.max(
-      ...elements.map((el) => Number(el.dataset.stackCount || 0))
-    );
-    return stored > 0 ? stored : elements.length;
+    const stackEl = getStackItemById(`stack-item-stack-${stackId}`);
+    if (!stackEl) {
+      return 0;
+    }
+    const stored = Number(stackEl.dataset.stackCount || 0);
+    return stored > 0 ? stored : 1;
   };
 
   const updateStackUI = (stackId, countOverride = null) => {
     if (!stackId) {
       return;
     }
-    const stackKey = String(stackId);
-    const elements = Array.from(document.querySelectorAll(`[data-stack-id="${stackKey}"]`));
-    if (elements.length === 0) {
+    const stackEl = getStackItemById(`stack-item-stack-${stackId}`);
+    if (!stackEl) {
       return;
     }
 
-    const stored = Math.max(
-      ...elements.map((el) => Number(el.dataset.stackCount || 0))
-    );
-    const count = countOverride !== null ? countOverride : (stored > 0 ? stored : elements.length);
-    elements.forEach((el) => {
-      const badge = el.querySelector('[data-stack-badge]');
-      const controls = el.querySelector('[data-stack-controls]');
-      el.dataset.stackCount = String(count);
-      if (badge) {
-        badge.textContent = String(count);
-        badge.style.display = count > 1 ? 'flex' : 'none';
-      }
-      if (controls) {
-        controls.style.display = 'none';
-      }
-    });
-
-    const topEl = elements.reduce((current, candidate) => {
-      const currentIndex = Number(current.dataset.stackIndex || 0);
-      const candidateIndex = Number(candidate.dataset.stackIndex || 0);
-      return candidateIndex >= currentIndex ? candidate : current;
-    }, elements[0]);
-
-    const topBadge = topEl.querySelector('[data-stack-badge]');
-    const topControls = topEl.querySelector('[data-stack-controls]');
-    if (topBadge) {
-      topBadge.style.display = count > 1 ? 'flex' : 'none';
+    const stored = Number(stackEl.dataset.stackCount || 0);
+    const count = countOverride !== null ? countOverride : (stored > 0 ? stored : 1);
+    const badge = stackEl.querySelector('[data-stack-badge]');
+    const controls = stackEl.querySelector('[data-stack-controls]');
+    stackEl.dataset.stackCount = String(count);
+    if (badge) {
+      badge.textContent = String(count);
+      badge.style.display = count > 1 ? 'flex' : 'none';
     }
-    if (topControls && count > 1) {
-      const addButton = topControls.querySelector('.stack-add');
+    if (controls) {
+      controls.style.display = count > 1 ? 'flex' : 'none';
+      const addButton = controls.querySelector('.stack-add');
       if (addButton) {
         addButton.style.display = count >= 10 ? 'none' : 'inline-flex';
       }
-      topControls.style.display = 'flex';
     }
   };
 
   const applyStackPayload = (placements) => {
     const updatedStackIds = new Set();
     placements.forEach((placement) => {
-      const el = document.querySelector(`[data-placement-id="${placement.id}"]`);
-      if (!el) {
-        return;
-      }
       if (placement.stackId) {
-        el.dataset.stackId = String(placement.stackId);
         updatedStackIds.add(String(placement.stackId));
-      } else {
-        el.dataset.stackId = '';
       }
-      el.dataset.stackIndex = placement.stackIndex ?? '';
     });
-    updatedStackIds.forEach((stackId) => updateStackUI(stackId));
+    updatedStackIds.forEach((stackId) => {
+      updateStackFromPlacements(stackId, placements);
+      updateStackUI(stackId);
+    });
   };
 
   const updateStackFromPlacements = (stackId, placements) => {
@@ -609,7 +594,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const candidateIndex = Number(candidate.stackIndex ?? 0);
       return candidateIndex >= currentIndex ? candidate : current;
     }, items[0]);
-    const stackEl = document.querySelector(`[data-stack-id="${stackId}"]`);
+    const stackEl = getStackItemById(`stack-item-stack-${stackId}`);
     if (stackEl) {
       stackEl.dataset.placementId = String(top.id);
       stackEl.dataset.stackIndex = String(top.stackIndex ?? '');
@@ -664,6 +649,9 @@ document.addEventListener('DOMContentLoaded', () => {
         placedEl.dataset.stackId = String(resolvedStackId);
         placedEl.dataset.stackIndex = placedEl.dataset.stackIndex || '0';
         placedEl.dataset.placementId = String(payload.id);
+        if (placedEl.id !== `stack-item-stack-${resolvedStackId}`) {
+          placedEl.id = `stack-item-stack-${resolvedStackId}`;
+        }
         updateStackUI(String(resolvedStackId), getStackCount(String(resolvedStackId)) + 1);
       }
       setMessage('');
@@ -703,7 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       updateStackUI(stackKey, Math.max(0, currentCount - 1));
       if (payload.topId) {
-        const stackEl = document.querySelector(`[data-stack-id="${stackKey}"]`);
+        const stackEl = getStackItemById(`stack-item-stack-${stackKey}`);
         if (stackEl) {
           stackEl.dataset.placementId = String(payload.topId);
         }
