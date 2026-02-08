@@ -7,15 +7,11 @@ namespace App\Service;
 use App\Entity\Dish;
 use App\Entity\Shelf;
 use App\Entity\Stack;
-use App\Exception\CollisionException;
 use App\Factory\StackFactory;
 use App\Repository\StackRepository;
-use Doctrine\DBAL\Exception as DbalException;
 
 final readonly class StackService
 {
-    private const SQLSTATE_EXCLUSION_VIOLATION = '23P01';
-
     public function __construct(
         private StackRepository $stackRepository,
         private StackFactory $stackFactory
@@ -46,20 +42,14 @@ final readonly class StackService
         $target->setCount($target->getCount() + $movedCount);
         $sourceRemaining = $source->getCount() - $movedCount;
 
-        try {
-            $result = $this->stackRepository->mergeStacks($movedCount, $sourceRemaining, $source, $target);
+        $result = $this->stackRepository->mergeStacks($movedCount, $sourceRemaining, $source, $target);
 
-            return new StackMergeResult(
-                $result['movedCount'],
-                $result['sourceRemaining'],
-                $result['target'],
-                $result['source']
-            );
-        } catch (\Throwable $exception) {
-            $this->rethrowCollision($exception);
-        }
-
-        throw new \RuntimeException('Unexpected merge failure.');
+        return new StackMergeResult(
+            $result['movedCount'],
+            $result['sourceRemaining'],
+            $result['target'],
+            $result['source']
+        );
     }
 
     public function unstackOneItem(Stack $stack): Stack {
@@ -91,81 +81,37 @@ final readonly class StackService
         }
 
         $clampedX = max(0, min($x, $maxX));
-
-        return $this->placeOnSpecificX($clampedX, $maxX, $shelf, $dish);
-    }
-
-    public function addDish(Dish $dish, Stack $stack): Stack {
-        $this->assertStackable($stack->getShelf(), $dish, $stack);
-
-        try {
-            $nextCount = $stack->getCount() + 1;
-            if ($nextCount > $dish->getStackLimit()) {
-                throw new \InvalidArgumentException('Stack is full.');
-            }
-            $stack->setCount($nextCount);
-            $this->stackRepository->save($stack);
-
-            return $stack;
-        } catch (\Throwable $exception) {
-            $this->rethrowCollision($exception);
-        }
-    }
-
-    private function assertStackable(Shelf $shelf, Dish $dish, Stack $target): void {
-        if ($dish->getStackLimit() <= 1) {
-            throw new \InvalidArgumentException('Dish is not stackable.');
-        }
-
-        if ($target->getShelf()->getId() !== $shelf->getId()) {
-            throw new \InvalidArgumentException('Target shelf mismatch.');
-        }
-
-        if ($target->getDish()->getType() !== $dish->getType()) {
-            throw new \InvalidArgumentException('Dish types do not match.');
-        }
-    }
-
-    private function saveWithCollisionCheck(Stack $stack): void {
-        try {
-            $this->stackRepository->save($stack);
-        } catch (\Throwable $exception) {
-            $this->rethrowCollision($exception);
-        }
-    }
-
-    private function rethrowCollision(\Throwable $exception): void {
-        if ($this->isCollisionException($exception)) {
-            throw new CollisionException('Stack collides with existing items.', 0, $exception);
-        }
-
-        throw $exception;
-    }
-
-    private function placeOnSpecificX(int $x, int $maxX, Shelf $shelf, Dish $dish): ?Stack {
-        $clampedX = max(0, min($x, $maxX));
         $stack = $this->stackFactory->create($clampedX, 0, $shelf, $dish);
 
         try {
-            $this->saveWithCollisionCheck($stack);
-        } catch (CollisionException) {
-            $this->stackRepository->detach($stack);
+            $this->stackRepository->saveWithCollisionCheck($stack);
+        } catch (\App\Exception\CollisionException) {
             return null;
         }
 
         return $stack;
     }
 
-    private function isCollisionException(\Throwable $exception): bool {
-        if ($exception instanceof DbalException && $exception->getSQLSTATE() === self::SQLSTATE_EXCLUSION_VIOLATION) {
-            return true;
+    /**
+     * @throws \Throwable|\InvalidArgumentException|\App\Exception\CollisionException
+     */
+    public function addDish(Dish $dish, Stack $stack): Stack {
+
+        if ($dish->getStackLimit() <= 1) {
+            throw new \InvalidArgumentException('Dish is not stackable.');
         }
 
-        $previous = $exception->getPrevious();
-        if ($previous instanceof \Throwable) {
-            return $this->isCollisionException($previous);
+        if ($stack->getDish()->getType() !== $dish->getType()) {
+            throw new \InvalidArgumentException('Dish types do not match.');
         }
 
-        return false;
+        $nextCount = $stack->getCount() + 1;
+        if ($nextCount > $dish->getStackLimit()) {
+            throw new \InvalidArgumentException('Stack is full.');
+        }
+        $stack->setCount($nextCount);
+        $this->stackRepository->saveWithCollisionCheck($stack);
+
+        return $stack;
     }
 }

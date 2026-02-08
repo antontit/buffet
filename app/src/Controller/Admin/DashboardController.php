@@ -25,8 +25,9 @@ class DashboardController extends AbstractDashboardController
 
     public function index(): Response
     {
-        $shelves = $this->shelfRepository->findBy([], ['id' => 'ASC']);
-        $dishes = $this->dishRepository->findBy([], ['id' => 'ASC']);
+        $shelves = $this->shelfRepository->findAllOrderedByIdAsc();
+        $dishes = $this->dishRepository->findAllOrderedByIdAsc();
+
         $placementsByShelf = [];
         $stackGroupsByShelf = [];
         foreach ($this->stackRepository->findAllWithDish() as $placement) {

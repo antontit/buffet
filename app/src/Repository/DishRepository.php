@@ -14,4 +14,12 @@ final class DishRepository extends ServiceEntityRepository
     {
         parent::__construct($registry, Dish::class);
     }
+
+    /**
+     * @return list<Dish>
+     */
+    public function findAllOrderedByIdAsc(): array
+    {
+        return $this->findBy([], ['id' => 'ASC']);
+    }
 }

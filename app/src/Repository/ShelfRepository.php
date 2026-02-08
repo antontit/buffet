@@ -14,4 +14,12 @@ final class ShelfRepository extends ServiceEntityRepository
     {
         parent::__construct($registry, Shelf::class);
     }
+
+    /**
+     * @return list<Shelf>
+     */
+    public function findAllOrderedByIdAsc(): array
+    {
+        return $this->findBy([], ['id' => 'ASC']);
+    }
 }
