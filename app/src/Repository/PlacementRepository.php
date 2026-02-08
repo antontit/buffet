@@ -123,6 +123,17 @@ final class PlacementRepository extends ServiceEntityRepository
         return (int) $value;
     }
 
+    public function getStackCount(int $stackId): int
+    {
+        $value = $this->getEntityManager()
+            ->getConnection()
+            ->fetchOne('SELECT COUNT(*) FROM placement WHERE stack_id = :stackId', [
+                'stackId' => $stackId,
+            ]);
+
+        return (int) $value;
+    }
+
     public function findStackTargetForDishOnShelf(int $shelfId, int $dishId): ?Placement
     {
         return $this->createQueryBuilder('p')

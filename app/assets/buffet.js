@@ -528,6 +528,10 @@ document.addEventListener('DOMContentLoaded', () => {
       topBadge.style.display = count > 1 ? 'flex' : 'none';
     }
     if (topControls && count > 1) {
+      const addButton = topControls.querySelector('.stack-add');
+      if (addButton) {
+        addButton.style.display = count >= 10 ? 'none' : 'inline-flex';
+      }
       topControls.style.display = 'flex';
     }
   };

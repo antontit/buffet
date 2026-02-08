@@ -40,7 +40,10 @@ final readonly class PlacementService
     public function placeDishOnShelf(Shelf $shelf, Dish $dish, int $x): ?Placement {
         $stackTarget = $this->placementRepository->findStackTargetForDishOnShelf($shelf->getId(), $dish->getId());
         if ($stackTarget !== null) {
-            return $this->placeOnExistingStack($shelf, $dish, $stackTarget);
+            $stackId = $stackTarget->getStackId();
+            if ($stackId !== null && $this->placementRepository->getStackCount((int) $stackId) < 10) {
+                return $this->placeOnExistingStack($shelf, $dish, $stackTarget);
+            }
         }
 
         $maxX = $shelf->getWidth() - $dish->getWidth();
@@ -64,6 +67,10 @@ final readonly class PlacementService
                     $target->setStackIndex(0);
                     $target->setY(0);
                     $this->placementRepository->save($target);
+                }
+
+                if ($this->placementRepository->getStackCount((int) $stackId) >= 10) {
+                    throw new \InvalidArgumentException('Stack is full.');
                 }
 
                 $stackTarget = $this->placementRepository->findTopOfStack((int) $stackId) ?? $target;

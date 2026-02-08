@@ -77,9 +77,16 @@
 .stack-controls {
   position: absolute;
   top: 2px;
-  right: 2px;
+  left: 26px;
   display: flex;
   gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.placed-dish:hover .stack-controls {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .stack-controls button {
@@ -97,7 +104,7 @@
 .placed-delete {
   position: absolute;
   top: 2px;
-  right: 46px;
+  right: 2px;
   width: 18px;
   height: 18px;
   border: none;

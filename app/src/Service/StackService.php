@@ -51,6 +51,12 @@ final readonly class StackService
                 $this->entityManager->flush();
             }
 
+            if ($source->getStackId() !== $targetStackId
+                && $this->placementRepository->getStackCount((int) $targetStackId) >= 10
+            ) {
+                throw new \InvalidArgumentException('Stack is full.');
+            }
+
             $this->detachFromOldStack($source, $targetStackId);
 
             $source->setShelf($target->getShelf());
