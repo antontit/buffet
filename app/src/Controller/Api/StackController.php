@@ -7,6 +7,8 @@ namespace App\Controller\Api;
 use App\Repository\PlacementRepository;
 use App\Repository\ShelfRepository;
 use App\Service\StackService;
+use App\Service\PlacementService;
+use App\Repository\DishRepository;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -18,7 +20,9 @@ final class StackController
     public function __construct(
         private readonly PlacementRepository $placementRepository,
         private readonly ShelfRepository $shelfRepository,
-        private readonly StackService $stackService
+        private readonly StackService $stackService,
+        private readonly PlacementService $placementService,
+        private readonly DishRepository $dishRepository
     ) {
     }
 
@@ -125,6 +129,59 @@ final class StackController
                 ),
             ],
             Response::HTTP_OK
+        );
+    }
+
+    #[Route('/{stackId}/add', name: 'api_stacks_add', methods: ['POST'])]
+    public function add(int $stackId, Request $request): JsonResponse
+    {
+        try {
+            $payload = $request->toArray();
+        } catch (\Throwable) {
+            return new JsonResponse(['error' => 'Invalid JSON payload'], Response::HTTP_BAD_REQUEST);
+        }
+
+        if (!isset($payload['dishId'])) {
+            return new JsonResponse(['error' => 'Missing dishId'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $dishId = $payload['dishId'];
+        if (!is_int($dishId) && !ctype_digit((string) $dishId)) {
+            return new JsonResponse(['error' => 'dishId must be an integer'], Response::HTTP_BAD_REQUEST);
+        }
+
+        /** @var \App\Entity\Placement|null $target */
+        $target = $this->placementRepository->findOneBy(['stackId' => $stackId], ['stackIndex' => 'ASC']);
+        if ($target === null) {
+            return new JsonResponse(['error' => 'Stack not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        $dish = $this->dishRepository->find((int) $dishId);
+        if ($dish === null) {
+            return new JsonResponse(['error' => 'Dish not found'], Response::HTTP_NOT_FOUND);
+        }
+
+        try {
+            $placement = $this->placementService->placeDishOnShelfStacked($target->getShelf(), $dish, $target);
+        } catch (\InvalidArgumentException $exception) {
+            return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
+        } catch (\App\Exception\CollisionException) {
+            return new JsonResponse(['error' => 'Collision detected'], Response::HTTP_CONFLICT);
+        }
+
+        return new JsonResponse(
+            [
+                'id' => $placement->getId(),
+                'shelfId' => $placement->getShelf()->getId(),
+                'dishId' => $placement->getDish()->getId(),
+                'x' => $placement->getX(),
+                'y' => $placement->getY(),
+                'width' => $placement->getWidth(),
+                'height' => $placement->getHeight(),
+                'stackId' => $placement->getStackId(),
+                'stackIndex' => $placement->getStackIndex(),
+            ],
+            Response::HTTP_CREATED
         );
     }
 

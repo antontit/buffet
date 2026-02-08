@@ -14,6 +14,8 @@ use Doctrine\DBAL\Exception as DbalException;
 
 final readonly class PlacementService
 {
+    private const SQLSTATE_EXCLUSION_VIOLATION = '23P01';
+
     public function __construct(
         private PlacementRepository $placementRepository,
         private PlacementFactory $placementFactory
@@ -123,7 +125,7 @@ final readonly class PlacementService
     }
 
     private function isCollisionException(\Throwable $exception): bool {
-        if ($exception instanceof DbalException && $exception->getSQLSTATE() === '23P01') {
+        if ($exception instanceof DbalException && $exception->getSQLSTATE() === self::SQLSTATE_EXCLUSION_VIOLATION) {
             return true;
         }
 

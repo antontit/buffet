@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Controller\Api;
 
+use App\Exception\CollisionException;
 use App\Repository\DishRepository;
 use App\Repository\PlacementRepository;
 use App\Repository\ShelfRepository;
-use App\Exception\CollisionException;
 use App\Service\PlacementService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -122,31 +122,14 @@ final class ShelfController
         }
         $x = (int) $rawX;
 
-        if (isset($payload['targetPlacementId'])) {
-            $targetId = $payload['targetPlacementId'];
-            if (!is_int($targetId) && !ctype_digit((string) $targetId)) {
-                return new JsonResponse(['error' => 'targetPlacementId must be an integer'], Response::HTTP_BAD_REQUEST);
-            }
-
-            /** @var \App\Entity\Placement|null $target */
-            $target = $this->placementRepository->find((int) $targetId);
-            if ($target === null) {
-                return new JsonResponse(['error' => 'Target placement not found'], Response::HTTP_NOT_FOUND);
-            }
-
-            try {
-                $placement = $this->placementService->placeDishOnShelfStacked($shelf, $dish, $target);
-            } catch (CollisionException) {
-                return new JsonResponse(
-                    ['error' => 'Collision detected'],
-                    Response::HTTP_CONFLICT,
-                    ['X-No-Space' => '1']
-                );
-            } catch (\InvalidArgumentException $exception) {
-                return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
-            }
-        } else {
+        try {
             $placement = $this->placementService->placeDishOnShelf($shelf, $dish, $x);
+        } catch (CollisionException) {
+            return new JsonResponse(
+                ['error' => 'Collision detected'],
+                Response::HTTP_CONFLICT,
+                ['X-No-Space' => '1']
+            );
         }
         if ($placement === null) {
             return new JsonResponse(

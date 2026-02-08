@@ -205,15 +205,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const dishId = state.draggedDishEl.dataset.dishId;
-    const response = await fetch(`/api/shelves/${shelf.dataset.shelfId}/placements`, {
+    const response = await fetch(`/api/stacks/${targetPlacementId}/add`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        shelfId: Number(shelf.dataset.shelfId),
         dishId: Number(dishId),
-        targetPlacementId: Number(targetPlacementId),
       }),
     });
 
