@@ -4,228 +4,219 @@ declare(strict_types=1);
 
 namespace App\Service;
 
-use App\Entity\Placement;
+use App\Entity\Stack;
+use App\Entity\Shelf;
 use App\Exception\CollisionException;
-use App\Repository\PlacementRepository;
+use App\Factory\StackFactory;
+use App\Repository\StackRepository;
 use Doctrine\DBAL\Exception as DbalException;
 use Doctrine\ORM\EntityManagerInterface;
 
 final readonly class StackService
 {
+    private const SQLSTATE_EXCLUSION_VIOLATION = '23P01';
+
     public function __construct(
         private EntityManagerInterface $entityManager,
-        private PlacementRepository $placementRepository
+        private StackRepository $stackRepository,
+        private StackFactory $stackFactory
     ) {
     }
 
-    public function removeTopOfStack(int $stackId): Placement
-    {
-        $placement = $this->placementRepository->findTopOfStack($stackId);
-        if ($placement === null) {
-            throw new \InvalidArgumentException('Stack not found.');
-        }
-
-        $this->placementRepository->remove($placement, true);
-
-        return $placement;
-    }
-
     /**
-     * @return list<Placement>
+     * @return array{
+     *     target: Stack,
+     *     source: Stack|null,
+     *     movedCount: int,
+     *     sourceRemaining: int
+     * }
      */
-    public function merge(Placement $source, Placement $target, string|int|null $position): array
+    public function merge(Stack $source, Stack $target): array
     {
         if ($source->getId() === $target->getId()) {
             throw new \InvalidArgumentException('Source and target must differ.');
         }
 
+        if ($source->getDish()->getType() !== $target->getDish()->getType()) {
+            throw new \InvalidArgumentException('Dish types do not match.');
+        }
+
+        $limit = $target->getDish()->getStackLimit();
+        if ($limit <= 1) {
+            throw new \InvalidArgumentException('Target dish is not stackable.');
+        }
+
         $connection = $this->entityManager->getConnection();
         $connection->beginTransaction();
 
         try {
-            $targetStackId = $target->getStackId();
-            if ($targetStackId === null) {
-                $targetStackId = $this->placementRepository->getNextStackId();
-                $target->setStackId($targetStackId);
-                $target->setStackIndex(0);
-                $this->entityManager->flush();
+            $available = max(0, $limit - $target->getCount());
+            $movedCount = min($available, $source->getCount());
+
+            if ($movedCount === 0) {
+                $connection->commit();
+
+                return [
+                    'target' => $target,
+                    'source' => $source,
+                    'movedCount' => 0,
+                    'sourceRemaining' => $source->getCount(),
+                ];
             }
 
-            if ($source->getStackId() !== $targetStackId
-                && $this->placementRepository->getStackCount((int) $targetStackId) >= 10
-            ) {
-                throw new \InvalidArgumentException('Stack is full.');
+            $target->setCount($target->getCount() + $movedCount);
+            $sourceRemaining = $source->getCount() - $movedCount;
+
+            if ($sourceRemaining <= 0) {
+                $this->stackRepository->remove($source);
+                $source = null;
+                $sourceRemaining = 0;
+            } else {
+                $source->setCount($sourceRemaining);
             }
-
-            $this->detachFromOldStack($source, $targetStackId);
-
-            $source->setShelf($target->getShelf());
-            $source->setX($target->getX());
-            $source->setY($target->getY());
-            $source->setStackId($targetStackId);
-
-            $items = $this->placementRepository->findByStackId($targetStackId);
-            $items = array_values(array_filter(
-                $items,
-                static fn (Placement $item): bool => $item->getId() !== $source->getId()
-            ));
-
-            $items = $this->insertByPosition($items, $source, $position);
-            $this->normalizeStackIndexes($items);
 
             $this->entityManager->flush();
             $connection->commit();
 
-            return $items;
+            return [
+                'target' => $target,
+                'source' => $source,
+                'movedCount' => $movedCount,
+                'sourceRemaining' => $sourceRemaining,
+            ];
         } catch (\Throwable $exception) {
             $connection->rollBack();
             if ($this->isCollisionException($exception)) {
-                throw new CollisionException('Placement collides with existing items.', 0, $exception);
+                throw new CollisionException('Stack collides with existing items.', 0, $exception);
             }
             throw $exception;
         }
     }
 
-    /**
-     * @return list<Placement>
-     */
-    public function unstack(Placement $placement): array
+    public function removeOne(Stack $stack): Stack
     {
-        $stackId = $placement->getStackId();
-        if ($stackId === null) {
-            throw new \InvalidArgumentException('Placement is not in a stack.');
+        $current = $stack->getCount();
+        if ($current <= 1) {
+            $this->stackRepository->remove($stack, true);
+            return $stack;
         }
 
-        $connection = $this->entityManager->getConnection();
-        $connection->beginTransaction();
+        $stack->setCount($current - 1);
+        $this->stackRepository->save($stack);
+
+        return $stack;
+    }
+
+    public function move(Stack $stack, Shelf $shelf, int $x, int $y): Stack
+    {
+        $stack->setShelf($shelf);
+        $stack->setX($x);
+        $stack->setY($y);
+        $this->stackRepository->save($stack);
+
+        return $stack;
+    }
+
+    /**
+     * @throw CollisionException
+     */
+    public function updatePosition(Stack $stack, int $x, int $y, ?Shelf $shelf): Stack
+    {
+        $stack->setX($x);
+        $stack->setY(0);
+
+        if ($shelf !== null) {
+            $stack->setShelf($shelf);
+        }
+
+        $this->saveWithCollisionCheck($stack);
+
+        return $stack;
+    }
+
+    public function placeDishOnShelf(Shelf $shelf, \App\Entity\Dish $dish, int $x): ?Stack
+    {
+        $maxX = $shelf->getWidth() - $dish->getWidth();
+        if ($maxX < 0) {
+            return null;
+        }
+
+        $clampedX = max(0, min($x, $maxX));
+
+        return $this->placeOnSpecificX($shelf, $dish, $clampedX, $maxX);
+    }
+
+    public function placeDishOnShelfStacked(Shelf $shelf, \App\Entity\Dish $dish, Stack $target): Stack
+    {
+        $this->assertStackable($shelf, $dish, $target);
 
         try {
-            $siblings = $this->placementRepository->findByStackId($stackId);
-            $remaining = array_values(array_filter(
-                $siblings,
-                static fn (Placement $item): bool => $item->getId() !== $placement->getId()
-            ));
-
-            $placement->setStackId(null);
-            $placement->setStackIndex(null);
-
-            if (count($remaining) <= 1) {
-                foreach ($remaining as $item) {
-                    $item->setStackId(null);
-                    $item->setStackIndex(null);
+            return $this->stackRepository->transactional(function () use ($dish, $target): Stack {
+                $nextCount = $target->getCount() + 1;
+                if ($nextCount > $dish->getStackLimit()) {
+                    throw new \InvalidArgumentException('Stack is full.');
                 }
+                $target->setCount($nextCount);
+                $this->stackRepository->save($target);
 
-                $this->entityManager->flush();
-                $connection->commit();
-
-                return $remaining;
-            }
-
-            $this->normalizeStackIndexes($remaining);
-
-            $this->entityManager->flush();
-            $connection->commit();
-
-            return $remaining;
+                return $target;
+            });
         } catch (\Throwable $exception) {
-            $connection->rollBack();
-            throw $exception;
+            $this->rethrowCollision($exception);
         }
     }
 
-    /**
-     * @return list<Placement>
-     */
-    public function moveStack(int $stackId, \App\Entity\Shelf $shelf, int $x, int $y): array
+    private function assertStackable(Shelf $shelf, \App\Entity\Dish $dish, Stack $target): void
     {
-        $connection = $this->entityManager->getConnection();
-        $connection->beginTransaction();
+        if ($dish->getStackLimit() <= 1) {
+            throw new \InvalidArgumentException('Dish is not stackable.');
+        }
+
+        if ($target->getShelf()->getId() !== $shelf->getId()) {
+            throw new \InvalidArgumentException('Target shelf mismatch.');
+        }
+
+        if ($target->getDish()->getType() !== $dish->getType()) {
+            throw new \InvalidArgumentException('Dish types do not match.');
+        }
+    }
+
+    private function saveWithCollisionCheck(Stack $stack): void
+    {
+        try {
+            $this->stackRepository->save($stack);
+        } catch (\Throwable $exception) {
+            $this->rethrowCollision($exception);
+        }
+    }
+
+    private function rethrowCollision(\Throwable $exception): void
+    {
+        if ($this->isCollisionException($exception)) {
+            throw new CollisionException('Stack collides with existing items.', 0, $exception);
+        }
+
+        throw $exception;
+    }
+
+    private function placeOnSpecificX(Shelf $shelf, \App\Entity\Dish $dish, int $x, int $maxX): ?Stack
+    {
+        $clampedX = max(0, min($x, $maxX));
+        $stack = $this->stackFactory->create($shelf, $dish, $clampedX, 0);
 
         try {
-            $items = $this->placementRepository->findByStackId($stackId);
-            if ($items === []) {
-                throw new \InvalidArgumentException('Stack not found.');
-            }
-
-            foreach ($items as $placement) {
-                $placement->setShelf($shelf);
-                $placement->setX($x);
-                $placement->setY($y);
-            }
-
-            $this->entityManager->flush();
-            $connection->commit();
-
-            return $items;
-        } catch (\Throwable $exception) {
-            $connection->rollBack();
-            throw $exception;
-        }
-    }
-
-    /**
-     * @param list<Placement> $items
-     * @return list<Placement>
-     */
-    private function insertByPosition(array $items, Placement $source, string|int|null $position): array
-    {
-        if (is_int($position)) {
-            $index = max(0, min($position, count($items)));
-            array_splice($items, $index, 0, [$source]);
-
-            return $items;
+            $this->saveWithCollisionCheck($stack);
+        } catch (CollisionException) {
+            $this->stackRepository->detach($stack);
+            return null;
         }
 
-        if (is_string($position) && strtolower($position) === 'bottom') {
-            array_unshift($items, $source);
-
-            return $items;
-        }
-
-        $items[] = $source;
-
-        return $items;
-    }
-
-    /**
-     * @param list<Placement> $items
-     */
-    private function normalizeStackIndexes(array $items): void
-    {
-        foreach ($items as $index => $placement) {
-            $placement->setStackIndex($index);
-        }
-    }
-
-    private function detachFromOldStack(Placement $source, int $targetStackId): void
-    {
-        $oldStackId = $source->getStackId();
-        if ($oldStackId === null || $oldStackId === $targetStackId) {
-            return;
-        }
-
-        $siblings = $this->placementRepository->findByStackId($oldStackId);
-        $siblings = array_values(array_filter(
-            $siblings,
-            static fn (Placement $item): bool => $item->getId() !== $source->getId()
-        ));
-
-        if (count($siblings) === 1) {
-            $remaining = $siblings[0];
-            $remaining->setStackId(null);
-            $remaining->setStackIndex(null);
-
-            return;
-        }
-
-        foreach ($siblings as $index => $placement) {
-            $placement->setStackIndex($index);
-        }
+        return $stack;
     }
 
     private function isCollisionException(\Throwable $exception): bool
     {
-        if ($exception instanceof DbalException && $exception->getSQLSTATE() === '23P01') {
+        if ($exception instanceof DbalException && $exception->getSQLSTATE() === self::SQLSTATE_EXCLUSION_VIOLATION) {
             return true;
         }
 

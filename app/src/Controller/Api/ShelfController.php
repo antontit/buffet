@@ -6,9 +6,9 @@ namespace App\Controller\Api;
 
 use App\Exception\CollisionException;
 use App\Repository\DishRepository;
-use App\Repository\PlacementRepository;
+use App\Repository\StackRepository;
 use App\Repository\ShelfRepository;
-use App\Service\PlacementService;
+use App\Service\StackService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -19,9 +19,9 @@ final class ShelfController
 {
     public function __construct(
         private readonly ShelfRepository $shelfRepository,
-        private readonly PlacementRepository $placementRepository,
+        private readonly StackRepository $stackRepository,
         private readonly DishRepository $dishRepository,
-        private readonly PlacementService $placementService
+        private readonly StackService $stackService
     ) {
     }
 
@@ -34,7 +34,7 @@ final class ShelfController
             return new JsonResponse(['error' => 'Shelf not found'], Response::HTTP_NOT_FOUND);
         }
 
-        $placements = $this->placementRepository->findByShelfWithDish($shelf);
+        $stacks = $this->stackRepository->findByShelfWithDish($shelf);
 
         $payload = [
             'shelf' => [
@@ -45,18 +45,17 @@ final class ShelfController
                 'x' => $shelf->getX(),
                 'y' => $shelf->getY(),
             ],
-            'placements' => array_map(
-                static function (\App\Entity\Placement $placement): array {
-                    $dish = $placement->getDish();
+            'stacks' => array_map(
+                static function (\App\Entity\Stack $stack): array {
+                    $dish = $stack->getDish();
 
                     return [
-                        'id' => $placement->getId(),
-                        'x' => $placement->getX(),
-                        'y' => $placement->getY(),
-                        'width' => $placement->getWidth(),
-                        'height' => $placement->getHeight(),
-                        'stackId' => $placement->getStackId(),
-                        'stackIndex' => $placement->getStackIndex(),
+                        'id' => $stack->getId(),
+                        'x' => $stack->getX(),
+                        'y' => $stack->getY(),
+                        'width' => $stack->getWidth(),
+                        'height' => $stack->getHeight(),
+                        'count' => $stack->getCount(),
                         'dish' => [
                             'id' => $dish->getId(),
                             'name' => $dish->getName(),
@@ -64,19 +63,19 @@ final class ShelfController
                             'image' => $dish->getImage(),
                             'width' => $dish->getWidth(),
                             'height' => $dish->getHeight(),
-                            'isStacked' => $dish->isStacked(),
+                            'stackLimit' => $dish->getStackLimit(),
                         ],
                     ];
                 },
-                $placements
+                $stacks
             ),
         ];
 
         return new JsonResponse($payload, Response::HTTP_OK);
     }
 
-    #[Route('/{id}/placements', name: 'api_shelves_add_placement', methods: ['POST'])]
-    public function addPlacement(int $id, Request $request): JsonResponse
+    #[Route('/{id}/stacks', name: 'api_shelves_add_stack', methods: ['POST'])]
+    public function addStack(int $id, Request $request): JsonResponse
     {
         try {
             $payload = $request->toArray();
@@ -123,7 +122,7 @@ final class ShelfController
         $x = (int) $rawX;
 
         try {
-            $placement = $this->placementService->placeDishOnShelf($shelf, $dish, $x);
+            $stack = $this->stackService->placeDishOnShelf($shelf, $dish, $x);
         } catch (CollisionException) {
             return new JsonResponse(
                 ['error' => 'Collision detected'],
@@ -131,7 +130,7 @@ final class ShelfController
                 ['X-No-Space' => '1']
             );
         }
-        if ($placement === null) {
+        if ($stack === null) {
             return new JsonResponse(
                 ['error' => 'No space available'],
                 Response::HTTP_CONFLICT,
@@ -141,15 +140,14 @@ final class ShelfController
 
         return new JsonResponse(
             [
-                'id' => $placement->getId(),
-                'shelfId' => $placement->getShelf()->getId(),
-                'dishId' => $placement->getDish()->getId(),
-                'x' => $placement->getX(),
-                'y' => $placement->getY(),
-                'width' => $placement->getWidth(),
-                'height' => $placement->getHeight(),
-                'stackId' => $placement->getStackId(),
-                'stackIndex' => $placement->getStackIndex(),
+                'id' => $stack->getId(),
+                'shelfId' => $stack->getShelf()->getId(),
+                'dishId' => $stack->getDish()->getId(),
+                'x' => $stack->getX(),
+                'y' => $stack->getY(),
+                'width' => $stack->getWidth(),
+                'height' => $stack->getHeight(),
+                'count' => $stack->getCount(),
             ],
             Response::HTTP_CREATED
         );

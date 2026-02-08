@@ -22,13 +22,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const getDragData = (event) => {
     const transfer = parseTransferData(event);
     const elementId = event.dataTransfer.getData('text/stack-item-id');
-    if (transfer.placementId) {
-      return { placementId: String(transfer.placementId), dishId: null, elementId: elementId || null };
+    if (transfer.stackId) {
+      return { stackId: String(transfer.stackId), dishId: null, elementId: elementId || null };
     }
     if (transfer.dishId) {
-      return { placementId: null, dishId: String(transfer.dishId), elementId: null };
+      return { stackId: null, dishId: String(transfer.dishId), elementId: null };
     }
-    return { placementId: null, dishId: null, elementId: null };
+    return { stackId: null, dishId: null, elementId: null };
   };
 
   const getStackItemById = (elementId) => {
@@ -38,19 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return document.getElementById(elementId);
   };
 
-  const getStackItemByPlacementId = (placementId) => {
-    if (!placementId) {
-      return null;
-    }
-    return document.getElementById(`stack-item-${placementId}`);
-  };
-
-  const buildStackItemId = (stackId, placementId) => {
-    if (stackId) {
-      return `stack-item-stack-${stackId}`;
-    }
-    return `stack-item-${placementId}`;
-  };
+  const buildStackItemId = (placementId) => `stack-item-stack-${placementId}`;
 
   const parseTransferData = (event) => {
     const raw = event.dataTransfer.getData('text/plain');
@@ -93,10 +81,10 @@ document.addEventListener('DOMContentLoaded', () => {
     || a.bottom >= b.top
   );
 
-  const computeOverlap = (shelf, rect, ignorePlacementId) => Array.from(
+  const computeOverlap = (shelf, rect, ignoreStackId) => Array.from(
     shelf.querySelectorAll('.stack-item')
   ).some((item) => {
-    if (ignorePlacementId && item.dataset.placementId === ignorePlacementId) {
+    if (ignoreStackId && item.dataset.stackId === ignoreStackId) {
       return false;
     }
       const itemLeft = Number(item.style.left.replace('px', ''));
@@ -107,29 +95,30 @@ document.addEventListener('DOMContentLoaded', () => {
     return overlaps(rect, itemRect);
   });
 
-  const isStackCompatible = (targetEl, draggedEl) => (
-    targetEl
-    && draggedEl
-    && targetEl.dataset.isStacked === '1'
-    && draggedEl.dataset.isStacked === '1'
-    && targetEl.dataset.dishType === draggedEl.dataset.dishType
-  );
+  const isStackCompatible = (targetEl, draggedEl) => {
+    if (!targetEl || !draggedEl) {
+      return false;
+    }
+    const targetLimit = Number(targetEl.dataset.stackLimit || 1);
+    const draggedLimit = Number(draggedEl.dataset.stackLimit || 1);
+    return targetLimit > 1 && draggedLimit > 1 && targetEl.dataset.dishType === draggedEl.dataset.dishType;
+  };
 
   const updateCollisionState = (shelf, event) => {
-    const { placementId, dishId, elementId } = getDragData(event);
-    if (!placementId && !dishId) {
+    const { stackId, dishId, elementId } = getDragData(event);
+    if (!stackId && !dishId) {
       clearShelfState(shelf);
       return;
     }
 
     const targetDishEl = event.target.closest('.stack-item');
-    if (targetDishEl && placementId) {
+    if (targetDishEl && stackId) {
       setShelfState(shelf, false);
       return;
     }
 
-    const draggedEl = placementId
-      ? getStackItemById(elementId) || getStackItemById(`stack-item-${placementId}`) || getStackItemById(`stack-item-stack-${placementId}`)
+    const draggedEl = stackId
+      ? getStackItemById(elementId) || getStackItemById(buildStackItemId(stackId))
       : document.querySelector(`.buffet-items [data-dish-id="${dishId}"]`);
     if (!draggedEl) {
       clearShelfState(shelf);
@@ -144,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const { width, height } = getElementSize(draggedEl);
     const { x, y } = getDropPoint(shelf, event, width, height);
     const rect = toRect(x, y, width, height);
-    const overlap = computeOverlap(shelf, rect, placementId);
+    const overlap = computeOverlap(shelf, rect, stackId);
 
     setShelfState(shelf, overlap);
   };
@@ -152,9 +141,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const bindDragSource = (item) => {
     item.addEventListener('dragstart', (event) => {
       const dragEl = item.closest('.stack-item') || item;
-      if (dragEl.dataset.placementId) {
+      if (dragEl.dataset.stackId) {
         event.dataTransfer.setData('text/plain', JSON.stringify({
-          placementId: dragEl.dataset.placementId,
+          stackId: dragEl.dataset.stackId,
         }));
         event.dataTransfer.setData('text/stack-item-id', dragEl.id || '');
         event.dataTransfer.effectAllowed = 'move';
@@ -172,15 +161,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const wrapper = document.createElement('div');
     wrapper.className = 'stack-item';
     wrapper.draggable = true;
-    wrapper.id = buildStackItemId(payload.stackId || null, payload.id);
-    wrapper.dataset.placementId = payload.id;
+    wrapper.id = buildStackItemId(payload.id);
+    wrapper.dataset.stackId = payload.id;
     wrapper.dataset.dishId = sourceDishEl.dataset.dishId || payload.dishId;
     wrapper.dataset.dishType = sourceDishEl.dataset.dishType;
-    wrapper.dataset.isStacked = sourceDishEl.dataset.isStacked;
+    wrapper.dataset.stackLimit = sourceDishEl.dataset.stackLimit || '1';
     wrapper.dataset.image = sourceDishEl.dataset.image || sourceDishEl.src;
-    wrapper.dataset.stackId = payload.stackId || '';
-    wrapper.dataset.stackIndex = payload.stackIndex || '';
-    wrapper.dataset.stackCount = payload.stackCount || '1';
+    wrapper.dataset.stackCount = payload.count || '1';
     wrapper.dataset.width = payload.width;
     wrapper.dataset.height = payload.height;
     wrapper.style.left = `${payload.x}px`;
@@ -221,14 +208,14 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const handleStackDrop = async (shelf, targetDishEl, dragData) => {
-    const targetPlacementId = targetDishEl.dataset.placementId;
+    const targetStackId = targetDishEl.dataset.stackId;
 
-    if (dragData.placementId) {
-      if (dragData.placementId === targetPlacementId) {
+    if (dragData.stackId) {
+      if (dragData.stackId === targetStackId) {
         return true;
       }
 
-      const sourceEl = getStackItemById(dragData.elementId) || getStackItemById(`stack-item-${dragData.placementId}`) || getStackItemById(`stack-item-stack-${dragData.placementId}`);
+      const sourceEl = getStackItemById(dragData.elementId) || getStackItemById(buildStackItemId(dragData.stackId));
       const sourceStackId = sourceEl?.dataset.stackId || null;
       const sourceCount = sourceStackId ? getStackCount(sourceStackId) : 1;
       const response = await fetch('/api/stacks/merge', {
@@ -237,9 +224,8 @@ document.addEventListener('DOMContentLoaded', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          sourcePlacementId: Number(dragData.placementId),
-          targetPlacementId: Number(targetPlacementId),
-          position: 'top',
+          sourceStackId: Number(dragData.stackId),
+          targetStackId: Number(targetStackId),
         }),
       });
 
@@ -249,15 +235,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const payload = await response.json();
-      const resolvedStackId = payload.stackId || targetDishEl.dataset.stackId;
-      const stackKey = resolvedStackId ? String(resolvedStackId) : '';
-      const targetCount = stackKey ? getStackCount(stackKey) : 0;
-      const available = Math.max(0, 10 - targetCount);
-      const movedCount = sourceStackId === stackKey ? 0 : Math.min(available, sourceCount);
-      const sourceRemainingCount = sourceStackId && sourceStackId !== stackKey
-        ? Math.max(0, sourceCount - movedCount)
-        : sourceCount;
-      const draggedEl = sourceEl || getStackItemById(`stack-item-${dragData.placementId}`);
+      const stackKey = targetDishEl.dataset.stackId ? String(targetDishEl.dataset.stackId) : '';
+      const movedCount = Number(payload.movedCount || 0);
+      const targetCount = Number(payload.targetCount || getStackCount(stackKey));
+      const sourceRemainingCount = Number(payload.sourceRemainingCount ?? sourceCount);
+      const draggedEl = sourceEl || getStackItemById(buildStackItemId(dragData.stackId));
 
       if (sourceStackId && sourceStackId !== stackKey) {
         if (sourceRemainingCount === 0 && draggedEl) {
@@ -265,20 +247,17 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (sourceRemainingCount > 0) {
           updateStackUI(sourceStackId, sourceRemainingCount);
         }
-      } else if (!sourceStackId && draggedEl) {
+      } else if (draggedEl && sourceStackId !== stackKey) {
         draggedEl.remove();
       }
 
-      if (stackKey && sourceStackId !== stackKey) {
-        updateStackUI(stackKey, targetCount + movedCount);
+      if (stackKey) {
+        updateStackUI(stackKey, targetCount);
       }
 
       setMessage('');
-      if (payload.placements) {
-        applyStackPayload(payload.placements);
-        if (stackKey) {
-          updateStackFromPlacements(stackKey, payload.placements);
-        }
+      if (stackKey) {
+        updateStackUI(stackKey);
       }
       return true;
     }
@@ -295,7 +274,7 @@ document.addEventListener('DOMContentLoaded', () => {
       },
       body: JSON.stringify({
         dishId: Number(dishId),
-        targetPlacementId: Number(targetPlacementId),
+        targetStackId: Number(targetStackId),
       }),
     });
 
@@ -305,27 +284,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const payload = await response.json();
-    const resolvedStackId = payload.stackId || targetDishEl.dataset.stackId;
+    const stackId = targetDishEl.dataset.stackId;
     setMessage('');
-    if (resolvedStackId) {
-      targetDishEl.dataset.stackId = String(resolvedStackId);
-      targetDishEl.dataset.stackIndex = targetDishEl.dataset.stackIndex || '0';
-      targetDishEl.dataset.placementId = String(payload.id);
-      if (targetDishEl.id !== `stack-item-stack-${resolvedStackId}`) {
-        targetDishEl.id = `stack-item-stack-${resolvedStackId}`;
-      }
-      updateStackUI(String(resolvedStackId), getStackCount(String(resolvedStackId)) + 1);
+    if (stackId) {
+      updateStackUI(String(stackId), Number(payload.count || getStackCount(String(stackId)) + 1));
     }
 
     return true;
   };
 
   const handleMoveDrop = async (shelf, event, dragData) => {
-    if (!dragData.placementId) {
+    if (!dragData.stackId) {
       return false;
     }
 
-    const placedEl = getStackItemById(dragData.elementId) || getStackItemById(`stack-item-${dragData.placementId}`) || getStackItemById(`stack-item-stack-${dragData.placementId}`);
+    const placedEl = getStackItemById(dragData.elementId) || getStackItemById(buildStackItemId(dragData.stackId));
     if (!placedEl) {
       return true;
     }
@@ -358,12 +331,11 @@ document.addEventListener('DOMContentLoaded', () => {
       shelf.appendChild(placedEl);
       setMessage('');
       updateStackUI(stackId);
-      updateStackFromPlacements(String(stackId), payload.placements);
 
       return true;
     }
 
-    const response = await fetch(`/api/placements/${dragData.placementId}`, {
+    const response = await fetch(`/api/stacks/${dragData.stackId}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
@@ -402,7 +374,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const { width, height } = getElementSize(sourceDishEl);
     const { x } = getDropPoint(shelf, event, width, height);
 
-    const response = await fetch(`/api/shelves/${shelf.dataset.shelfId}/placements`, {
+    const response = await fetch(`/api/shelves/${shelf.dataset.shelfId}/stacks`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -421,8 +393,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const payload = await response.json();
     setMessage('');
-    if (payload.stackId) {
-      const stackId = String(payload.stackId);
+    if (payload.id) {
+      const stackId = String(payload.id);
       const existingStackEl = getStackItemById(`stack-item-stack-${stackId}`);
       if (existingStackEl) {
         updateStackUI(stackId, getStackCount(stackId) + 1);
@@ -433,8 +405,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const placed = createPlacedElement(sourceDishEl, payload);
     shelf.appendChild(placed);
     bindDragSource(placed);
-    if (payload.stackId) {
-      updateStackUI(String(payload.stackId));
+    if (payload.id) {
+      updateStackUI(String(payload.id), Number(payload.count || 1));
     }
 
     return true;
@@ -443,9 +415,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const handleShelfDrop = async (shelf, event) => {
     const dragData = getDragData(event);
     const targetDishEl = event.target.closest('.stack-item');
-    if (targetDishEl && (dragData.placementId || dragData.dishId)) {
-      const draggedEl = dragData.placementId
-        ? getStackItemById(dragData.elementId) || getStackItemById(`stack-item-${dragData.placementId}`) || getStackItemById(`stack-item-stack-${dragData.placementId}`)
+    if (targetDishEl && (dragData.stackId || dragData.dishId)) {
+      const draggedEl = dragData.stackId
+        ? getStackItemById(dragData.elementId) || getStackItemById(buildStackItemId(dragData.stackId))
         : document.querySelector(`.buffet-items [data-dish-id="${dragData.dishId}"]`);
       if (isStackCompatible(targetDishEl, draggedEl)) {
         await handleStackDrop(shelf, targetDishEl, dragData);
@@ -573,43 +545,13 @@ document.addEventListener('DOMContentLoaded', () => {
       controls.style.display = count > 1 ? 'flex' : 'none';
       const addButton = controls.querySelector('.stack-add');
       if (addButton) {
-        addButton.style.display = count >= 10 ? 'none' : 'inline-flex';
+        const limit = Number(stackEl.dataset.stackLimit || 1);
+        addButton.style.display = count >= limit ? 'none' : 'inline-flex';
       }
     }
   };
 
-  const applyStackPayload = (placements) => {
-    const updatedStackIds = new Set();
-    placements.forEach((placement) => {
-      if (placement.stackId) {
-        updatedStackIds.add(String(placement.stackId));
-      }
-    });
-    updatedStackIds.forEach((stackId) => {
-      updateStackFromPlacements(stackId, placements);
-      updateStackUI(stackId);
-    });
-  };
-
-  const updateStackFromPlacements = (stackId, placements) => {
-    if (!stackId) {
-      return;
-    }
-    const items = placements.filter((placement) => String(placement.stackId) === String(stackId));
-    if (items.length === 0) {
-      return;
-    }
-    const top = items.reduce((current, candidate) => {
-      const currentIndex = Number(current.stackIndex ?? 0);
-      const candidateIndex = Number(candidate.stackIndex ?? 0);
-      return candidateIndex >= currentIndex ? candidate : current;
-    }, items[0]);
-    const stackEl = getStackItemById(`stack-item-stack-${stackId}`);
-    if (stackEl) {
-      stackEl.dataset.placementId = String(top.id);
-      stackEl.dataset.stackIndex = String(top.stackIndex ?? '');
-    }
-  };
+  
 
   const handleStackControls = async (event) => {
     const target = event.target;
@@ -654,15 +596,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const payload = await response.json();
-      const resolvedStackId = payload.stackId || placedEl.dataset.stackId;
-      if (resolvedStackId) {
-        placedEl.dataset.stackId = String(resolvedStackId);
-        placedEl.dataset.stackIndex = placedEl.dataset.stackIndex || '0';
+      const stackId = placedEl.dataset.stackId;
+      if (stackId) {
         placedEl.dataset.placementId = String(payload.id);
-        if (placedEl.id !== `stack-item-stack-${resolvedStackId}`) {
-          placedEl.id = `stack-item-stack-${resolvedStackId}`;
-        }
-        updateStackUI(String(resolvedStackId), getStackCount(String(resolvedStackId)) + 1);
+        updateStackUI(String(stackId), Number(payload.count || getStackCount(String(stackId)) + 1));
       }
       setMessage('');
       return;
@@ -691,20 +628,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const payload = await response.json();
       const stackKey = String(payload.stackId);
-      const currentCount = getStackCount(stackKey);
-      if (payload.removedId) {
-        const removedEl = getStackItemByPlacementId(payload.removedId);
-        if (removedEl) {
-          removedEl.remove();
-        }
-      }
-
-      updateStackUI(stackKey, Math.max(0, currentCount - 1));
-      if (payload.topId) {
+      if (payload.deleted) {
         const stackEl = getStackItemById(`stack-item-stack-${stackKey}`);
         if (stackEl) {
-          stackEl.dataset.placementId = String(payload.topId);
+          stackEl.remove();
         }
+      } else {
+        updateStackUI(stackKey, Number(payload.remainingCount || Math.max(0, getStackCount(stackKey) - 1)));
       }
       setMessage('');
     }

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Controller\Admin;
 
 use App\Repository\DishRepository;
-use App\Repository\PlacementRepository;
+use App\Repository\StackRepository;
 use App\Repository\ShelfRepository;
 use EasyCorp\Bundle\EasyAdminBundle\Attribute\AdminDashboard;
 use EasyCorp\Bundle\EasyAdminBundle\Config\Dashboard;
@@ -19,7 +19,7 @@ class DashboardController extends AbstractDashboardController
     public function __construct(
         private readonly ShelfRepository $shelfRepository,
         private readonly DishRepository $dishRepository,
-        private readonly PlacementRepository $placementRepository
+        private readonly StackRepository $stackRepository
     ) {
     }
 
@@ -29,50 +29,19 @@ class DashboardController extends AbstractDashboardController
         $dishes = $this->dishRepository->findBy([], ['id' => 'ASC']);
         $placementsByShelf = [];
         $stackGroupsByShelf = [];
-        $stackMeta = [];
-        foreach ($this->placementRepository->findAllWithDish() as $placement) {
+        foreach ($this->stackRepository->findAllWithDish() as $placement) {
             $shelfId = $placement->getShelf()->getId();
             if (!isset($placementsByShelf[$shelfId])) {
                 $placementsByShelf[$shelfId] = [];
             }
             $placementsByShelf[$shelfId][] = $placement;
-
-            $stackId = $placement->getStackId();
-            if ($stackId !== null) {
-                if (!isset($stackMeta[$stackId])) {
-                    $stackMeta[$stackId] = [
-                        'count' => 0,
-                        'topId' => $placement->getId(),
-                        'topIndex' => $placement->getStackIndex() ?? -1,
-                    ];
-                }
-                $stackMeta[$stackId]['count']++;
-                $stackIndex = $placement->getStackIndex() ?? -1;
-                if ($stackIndex >= $stackMeta[$stackId]['topIndex']) {
-                    $stackMeta[$stackId]['topIndex'] = $stackIndex;
-                    $stackMeta[$stackId]['topId'] = $placement->getId();
-                }
-            }
         }
         foreach ($placementsByShelf as $shelfId => $placements) {
             foreach ($placements as $placement) {
-                $stackId = $placement->getStackId();
-                if ($stackId === null) {
-                    $stackGroupsByShelf[$shelfId][] = [
-                        'placement' => $placement,
-                        'stackId' => null,
-                        'count' => 1,
-                    ];
-                    continue;
-                }
-
-                if (($stackMeta[$stackId]['topId'] ?? null) === $placement->getId()) {
-                    $stackGroupsByShelf[$shelfId][] = [
-                        'placement' => $placement,
-                        'stackId' => $stackId,
-                        'count' => $stackMeta[$stackId]['count'] ?? 1,
-                    ];
-                }
+                $stackGroupsByShelf[$shelfId][] = [
+                    'placement' => $placement,
+                    'count' => $placement->getCount(),
+                ];
             }
         }
 
@@ -81,7 +50,6 @@ class DashboardController extends AbstractDashboardController
             'dishes' => $dishes,
             'placementsByShelf' => $placementsByShelf,
             'stackGroupsByShelf' => $stackGroupsByShelf,
-            'stackMeta' => $stackMeta,
         ]);
     }
 

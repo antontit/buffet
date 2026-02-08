@@ -31,8 +31,8 @@ class Dish
     #[ORM\Column(type: 'integer')]
     private int $height;
 
-    #[ORM\Column(type: 'boolean', options: ['default' => false])]
-    private bool $isStacked = false;
+    #[ORM\Column(type: 'integer', options: ['default' => 1])]
+    private int $stackLimit = 1;
 
     public function getId(): ?int
     {
@@ -99,14 +99,14 @@ class Dish
         return $this;
     }
 
-    public function isStacked(): bool
+    public function getStackLimit(): int
     {
-        return $this->isStacked;
+        return $this->stackLimit;
     }
 
-    public function setIsStacked(bool $isStacked): self
+    public function setStackLimit(int $stackLimit): self
     {
-        $this->isStacked = $isStacked;
+        $this->stackLimit = $stackLimit;
 
         return $this;
     }

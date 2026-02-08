@@ -36,13 +36,11 @@
                             <div
                                 class="stack-item"
                                 draggable="true"
-                                id="{% if placement.stackId is not null %}stack-item-stack-{{ placement.stackId }}{% else %}stack-item-{{ placement.id }}{% endif %}"
-                                data-placement-id="{{ placement.id }}"
+                                id="stack-item-stack-{{ placement.id }}"
                                 data-dish-id="{{ placement.dish.id }}"
                                 data-dish-type="{{ placement.dish.type }}"
-                                data-is-stacked="{{ placement.dish.isStacked ? '1' : '0' }}"
-                                data-stack-id="{{ placement.stackId }}"
-                                data-stack-index="{{ placement.stackIndex }}"
+                                data-stack-limit="{{ placement.dish.stackLimit }}"
+                                data-stack-id="{{ placement.id }}"
                                 data-stack-count="{{ group.count }}"
                                 data-image="{{ asset(placement.dish.image) }}"
                                 data-width="{{ placement.width }}"
@@ -55,12 +53,12 @@
                                 <div
                                     class="stack-badge"
                                     data-stack-badge
-                                    style="{% if placement.stackId is null or (group.count ?? 0) < 2 %}display:none;{% endif %}"
+                                    style="{% if (group.count ?? 0) < 2 %}display:none;{% endif %}"
                                 >{{ group.count }}</div>
                                 <div
                                     class="stack-controls"
                                     data-stack-controls
-                                    style="{% if placement.stackId is null or (group.count ?? 0) < 2 %}display:none;{% endif %}"
+                                    style="{% if (group.count ?? 0) < 2 %}display:none;{% endif %}"
                                 >
                                     <button type="button" class="stack-add" aria-label="Add to stack" draggable="false">+</button>
                                     <button type="button" class="stack-remove" aria-label="Remove from stack" draggable="false">-</button>
@@ -79,7 +77,7 @@
                         draggable="true"
                         data-dish-id="{{ dish.id }}"
                         data-dish-type="{{ dish.type }}"
-                        data-is-stacked="{{ dish.isStacked ? '1' : '0' }}"
+                        data-stack-limit="{{ dish.stackLimit }}"
                         data-image="{{ asset(dish.image) }}"
                         data-width="{{ dish.width }}"
                         data-height="{{ dish.height }}"

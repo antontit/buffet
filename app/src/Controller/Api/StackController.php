@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace App\Controller\Api;
 
-use App\Repository\PlacementRepository;
+use App\Repository\StackRepository;
 use App\Repository\ShelfRepository;
 use App\Service\StackService;
-use App\Service\PlacementService;
 use App\Repository\DishRepository;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -18,10 +17,9 @@ use Symfony\Component\Routing\Attribute\Route;
 final class StackController
 {
     public function __construct(
-        private readonly PlacementRepository $placementRepository,
+        private readonly StackRepository $stackRepository,
         private readonly ShelfRepository $shelfRepository,
         private readonly StackService $stackService,
-        private readonly PlacementService $placementService,
         private readonly DishRepository $dishRepository
     ) {
     }
@@ -35,53 +33,38 @@ final class StackController
             return new JsonResponse(['error' => 'Invalid JSON payload'], Response::HTTP_BAD_REQUEST);
         }
 
-        if (!isset($payload['sourcePlacementId'], $payload['targetPlacementId'])) {
-            return new JsonResponse(['error' => 'Missing placement ids'], Response::HTTP_BAD_REQUEST);
+        if (!isset($payload['sourceStackId'], $payload['targetStackId'])) {
+            return new JsonResponse(['error' => 'Missing stack ids'], Response::HTTP_BAD_REQUEST);
         }
 
-        $sourceId = $payload['sourcePlacementId'];
-        $targetId = $payload['targetPlacementId'];
+        $sourceId = $payload['sourceStackId'];
+        $targetId = $payload['targetStackId'];
         if ((!is_int($sourceId) && !ctype_digit((string) $sourceId))
             || (!is_int($targetId) && !ctype_digit((string) $targetId))
         ) {
-            return new JsonResponse(['error' => 'Placement ids must be integers'], Response::HTTP_BAD_REQUEST);
+            return new JsonResponse(['error' => 'Stack ids must be integers'], Response::HTTP_BAD_REQUEST);
         }
 
-        /** @var \App\Entity\Placement|null $source */
-        $source = $this->placementRepository->find((int) $sourceId);
-        /** @var \App\Entity\Placement|null $target */
-        $target = $this->placementRepository->find((int) $targetId);
+        /** @var \App\Entity\Stack|null $source */
+        $source = $this->stackRepository->find((int) $sourceId);
+        /** @var \App\Entity\Stack|null $target */
+        $target = $this->stackRepository->find((int) $targetId);
         if ($source === null || $target === null) {
-            return new JsonResponse(['error' => 'Placement not found'], Response::HTTP_NOT_FOUND);
-        }
-
-        $position = $payload['position'] ?? null;
-        if ($position !== null
-            && !is_int($position)
-            && (!is_string($position) || !in_array(strtolower($position), ['top', 'bottom'], true))
-        ) {
-            return new JsonResponse(['error' => 'position must be top, bottom, or integer'], Response::HTTP_BAD_REQUEST);
+            return new JsonResponse(['error' => 'Stack not found'], Response::HTTP_NOT_FOUND);
         }
 
         try {
-            $items = $this->stackService->merge($source, $target, $position);
+            $result = $this->stackService->merge($source, $target);
         } catch (\InvalidArgumentException $exception) {
             return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
         }
 
         $payload = [
-            'stackId' => $target->getStackId(),
-            'placements' => array_map(
-                static fn ($placement): array => [
-                    'id' => $placement->getId(),
-                    'stackId' => $placement->getStackId(),
-                    'stackIndex' => $placement->getStackIndex(),
-                    'shelfId' => $placement->getShelf()->getId(),
-                    'x' => $placement->getX(),
-                    'y' => $placement->getY(),
-                ],
-                $items
-            ),
+            'targetId' => $result['target']->getId(),
+            'targetCount' => $result['target']->getCount(),
+            'sourceId' => $result['source']?->getId(),
+            'sourceRemainingCount' => $result['sourceRemaining'],
+            'movedCount' => $result['movedCount'],
         ];
 
         return new JsonResponse($payload, Response::HTTP_OK);
@@ -105,19 +88,21 @@ final class StackController
             return new JsonResponse(['error' => 'stackId must be an integer'], Response::HTTP_BAD_REQUEST);
         }
 
-        try {
-            $placement = $this->stackService->removeTopOfStack((int) $stackId);
-        } catch (\InvalidArgumentException $exception) {
-            return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_NOT_FOUND);
+        /** @var \App\Entity\Stack|null $placement */
+        $placement = $this->stackRepository->find((int) $stackId);
+        if ($placement === null) {
+            return new JsonResponse(['error' => 'Stack not found'], Response::HTTP_NOT_FOUND);
         }
 
-        $top = $this->placementRepository->findTopOfStack((int) $stackId);
+        $beforeCount = $placement->getCount();
+        $this->stackService->removeOne($placement);
 
         return new JsonResponse(
             [
                 'stackId' => (int) $stackId,
-                'removedId' => $placement->getId(),
-                'topId' => $top?->getId(),
+                'removedCount' => 1,
+                'remainingCount' => max(0, $beforeCount - 1),
+                'deleted' => $beforeCount <= 1,
             ],
             Response::HTTP_OK
         );
@@ -132,8 +117,8 @@ final class StackController
             return new JsonResponse(['error' => 'Invalid JSON payload'], Response::HTTP_BAD_REQUEST);
         }
 
-        if (!isset($payload['dishId'], $payload['targetPlacementId'])) {
-            return new JsonResponse(['error' => 'Missing dishId or targetPlacementId'], Response::HTTP_BAD_REQUEST);
+        if (!isset($payload['dishId'], $payload['targetStackId'])) {
+            return new JsonResponse(['error' => 'Missing dishId or targetStackId'], Response::HTTP_BAD_REQUEST);
         }
 
         $dishId = $payload['dishId'];
@@ -141,15 +126,15 @@ final class StackController
             return new JsonResponse(['error' => 'dishId must be an integer'], Response::HTTP_BAD_REQUEST);
         }
 
-        $targetPlacementId = $payload['targetPlacementId'];
-        if (!is_int($targetPlacementId) && !ctype_digit((string) $targetPlacementId)) {
-            return new JsonResponse(['error' => 'targetPlacementId must be an integer'], Response::HTTP_BAD_REQUEST);
+        $targetStackId = $payload['targetStackId'];
+        if (!is_int($targetStackId) && !ctype_digit((string) $targetStackId)) {
+            return new JsonResponse(['error' => 'targetStackId must be an integer'], Response::HTTP_BAD_REQUEST);
         }
 
-        /** @var \App\Entity\Placement|null $target */
-        $target = $this->placementRepository->find((int) $targetPlacementId);
+        /** @var \App\Entity\Stack|null $target */
+        $target = $this->stackRepository->find((int) $targetStackId);
         if ($target === null) {
-            return new JsonResponse(['error' => 'Target placement not found'], Response::HTTP_NOT_FOUND);
+            return new JsonResponse(['error' => 'Target stack not found'], Response::HTTP_NOT_FOUND);
         }
 
         $dish = $this->dishRepository->find((int) $dishId);
@@ -158,7 +143,7 @@ final class StackController
         }
 
         try {
-            $placement = $this->placementService->placeDishOnShelfStacked($target->getShelf(), $dish, $target);
+            $placement = $this->stackService->placeDishOnShelfStacked($target->getShelf(), $dish, $target);
         } catch (\InvalidArgumentException $exception) {
             return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
         } catch (\App\Exception\CollisionException) {
@@ -168,14 +153,7 @@ final class StackController
         return new JsonResponse(
             [
                 'id' => $placement->getId(),
-                'shelfId' => $placement->getShelf()->getId(),
-                'dishId' => $placement->getDish()->getId(),
-                'x' => $placement->getX(),
-                'y' => $placement->getY(),
-                'width' => $placement->getWidth(),
-                'height' => $placement->getHeight(),
-                'stackId' => $placement->getStackId(),
-                'stackIndex' => $placement->getStackIndex(),
+                'count' => $placement->getCount(),
             ],
             Response::HTTP_CREATED
         );
@@ -211,25 +189,21 @@ final class StackController
             return new JsonResponse(['error' => 'Shelf not found'], Response::HTTP_NOT_FOUND);
         }
 
-        try {
-            $items = $this->stackService->moveStack($stackId, $shelf, (int) $x, (int) $y);
-        } catch (\InvalidArgumentException $exception) {
-            return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_NOT_FOUND);
+        /** @var \App\Entity\Stack|null $stack */
+        $stack = $this->stackRepository->find($stackId);
+        if ($stack === null) {
+            return new JsonResponse(['error' => 'Stack not found'], Response::HTTP_NOT_FOUND);
         }
+
+        $stack = $this->stackService->move($stack, $shelf, (int) $x, (int) $y);
 
         return new JsonResponse(
             [
                 'stackId' => $stackId,
-                'placements' => array_map(
-                    static fn ($item): array => [
-                        'id' => $item->getId(),
-                        'shelfId' => $item->getShelf()->getId(),
-                        'x' => $item->getX(),
-                        'y' => $item->getY(),
-                        'stackIndex' => $item->getStackIndex(),
-                    ],
-                    $items
-                ),
+                'id' => $stack->getId(),
+                'shelfId' => $stack->getShelf()->getId(),
+                'x' => $stack->getX(),
+                'y' => $stack->getY(),
             ],
             Response::HTTP_OK
         );
@@ -238,10 +212,13 @@ final class StackController
     #[Route('/{stackId}', name: 'api_stacks_delete', methods: ['DELETE'])]
     public function delete(int $stackId): JsonResponse
     {
-        $removedCount = $this->placementRepository->removeByStackId($stackId);
-        if ($removedCount === 0) {
+        /** @var \App\Entity\Stack|null $stack */
+        $stack = $this->stackRepository->find($stackId);
+        if ($stack === null) {
             return new JsonResponse(['error' => 'Stack not found'], Response::HTTP_NOT_FOUND);
         }
+
+        $this->stackRepository->remove($stack, true);
 
         return new JsonResponse(null, Response::HTTP_NO_CONTENT);
     }
