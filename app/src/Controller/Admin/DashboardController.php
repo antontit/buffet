@@ -28,18 +28,37 @@ class DashboardController extends AbstractDashboardController
         $shelves = $this->shelfRepository->findBy([], ['id' => 'ASC']);
         $dishes = $this->dishRepository->findBy([], ['id' => 'ASC']);
         $placementsByShelf = [];
+        $stackMeta = [];
         foreach ($this->placementRepository->findAllWithDish() as $placement) {
             $shelfId = $placement->getShelf()->getId();
             if (!isset($placementsByShelf[$shelfId])) {
                 $placementsByShelf[$shelfId] = [];
             }
             $placementsByShelf[$shelfId][] = $placement;
+
+            $stackId = $placement->getStackId();
+            if ($stackId !== null) {
+                if (!isset($stackMeta[$stackId])) {
+                    $stackMeta[$stackId] = [
+                        'count' => 0,
+                        'topId' => $placement->getId(),
+                        'topIndex' => $placement->getStackIndex() ?? -1,
+                    ];
+                }
+                $stackMeta[$stackId]['count']++;
+                $stackIndex = $placement->getStackIndex() ?? -1;
+                if ($stackIndex >= $stackMeta[$stackId]['topIndex']) {
+                    $stackMeta[$stackId]['topIndex'] = $stackIndex;
+                    $stackMeta[$stackId]['topId'] = $placement->getId();
+                }
+            }
         }
 
         return $this->render('admin/buffet.html.twig', [
             'shelves' => $shelves,
             'dishes' => $dishes,
             'placementsByShelf' => $placementsByShelf,
+            'stackMeta' => $stackMeta,
         ]);
     }
 

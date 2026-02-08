@@ -139,6 +139,8 @@ document.addEventListener('DOMContentLoaded', () => {
     wrapper.dataset.dishType = sourceDishEl.dataset.dishType;
     wrapper.dataset.isStacked = sourceDishEl.dataset.isStacked;
     wrapper.dataset.image = sourceDishEl.dataset.image || sourceDishEl.src;
+    wrapper.dataset.stackId = payload.stackId || '';
+    wrapper.dataset.stackIndex = payload.stackIndex || '';
     wrapper.dataset.width = payload.width;
     wrapper.dataset.height = payload.height;
     wrapper.style.left = `${payload.x}px`;
@@ -155,8 +157,22 @@ document.addEventListener('DOMContentLoaded', () => {
     button.type = 'button';
     button.className = 'placed-delete';
     button.setAttribute('aria-label', 'Delete dish');
+    button.setAttribute('draggable', 'false');
     button.textContent = '×';
     wrapper.appendChild(button);
+
+    const badge = document.createElement('div');
+    badge.className = 'stack-badge';
+    badge.dataset.stackBadge = '1';
+    badge.style.display = 'none';
+    wrapper.appendChild(badge);
+
+    const controls = document.createElement('div');
+    controls.className = 'stack-controls';
+    controls.dataset.stackControls = '1';
+    controls.style.display = 'none';
+    controls.innerHTML = '<button type="button" class="stack-add" aria-label="Add to stack" draggable="false">+</button><button type="button" class="stack-remove" aria-label="Remove from stack" draggable="false">-</button>';
+    wrapper.appendChild(controls);
 
     return wrapper;
   };
@@ -187,16 +203,29 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const payload = await response.json();
+      const resolvedStackId = payload.stackId || targetDishEl.dataset.stackId;
       const sourcePlacement = payload.placements.find(
         (p) => String(p.id) === String(state.draggedPlacementId)
       );
       if (sourcePlacement && state.draggedDishEl) {
         state.draggedDishEl.style.left = `${sourcePlacement.x}px`;
         state.draggedDishEl.style.bottom = `${sourcePlacement.y}px`;
+      if (sourcePlacement.stackId || resolvedStackId) {
+        state.draggedDishEl.dataset.stackId = String(sourcePlacement.stackId || resolvedStackId);
+      }
+        if (sourcePlacement.stackIndex !== undefined) {
+          state.draggedDishEl.dataset.stackIndex = String(sourcePlacement.stackIndex ?? '');
+        }
         shelf.appendChild(state.draggedDishEl);
       }
 
       setMessage('');
+      if (payload.placements) {
+        applyStackPayload(payload.placements);
+      }
+      if (resolvedStackId) {
+        updateStackUI(String(resolvedStackId));
+      }
       return true;
     }
 
@@ -222,10 +251,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const payload = await response.json();
-    const placed = createPlacedElement(state.draggedDishEl, payload);
-    shelf.appendChild(placed);
-    bindDragSource(placed);
+    const resolvedStackId = payload.stackId || targetDishEl.dataset.stackId;
     setMessage('');
+    if (resolvedStackId) {
+      targetDishEl.dataset.stackId = String(resolvedStackId);
+      targetDishEl.dataset.stackIndex = targetDishEl.dataset.stackIndex || '0';
+      updateStackUI(String(resolvedStackId), getStackCount(String(resolvedStackId)) + 1);
+    }
 
     return true;
   };
@@ -242,6 +274,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const { width, height } = getElementSize(placedEl);
     const { x, y } = getDropPoint(shelf, event, width, height);
+    const stackId = placedEl.dataset.stackId || null;
+    const stackCount = stackId ? getStackCount(stackId) : 0;
+    if (stackId && stackCount > 1) {
+      const response = await fetch(`/api/stacks/${stackId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          shelfId: Number(shelf.dataset.shelfId),
+          x,
+          y,
+        }),
+      });
+
+      if (!response.ok) {
+        setMessage(response.status === 409 ? 'Collision detected.' : 'Failed to move stack.');
+        return true;
+      }
+
+      const payload = await response.json();
+      payload.placements.forEach((placement) => {
+        const itemEl = document.querySelector(`[data-placement-id="${placement.id}"]`);
+        if (!itemEl) {
+          return;
+        }
+        itemEl.style.left = `${placement.x}px`;
+        itemEl.style.bottom = `${placement.y}px`;
+        itemEl.dataset.stackIndex = placement.stackIndex ?? '';
+        shelf.appendChild(itemEl);
+      });
+      setMessage('');
+      updateStackUI(stackId);
+
+      return true;
+    }
 
     const response = await fetch(`/api/placements/${state.draggedPlacementId}`, {
       method: 'PATCH',
@@ -306,6 +374,9 @@ document.addEventListener('DOMContentLoaded', () => {
     shelf.appendChild(placed);
     bindDragSource(placed);
     setMessage('');
+    if (payload.stackId) {
+      updateStackUI(payload.stackId);
+    }
 
     return true;
   };
@@ -354,11 +425,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!placementId) {
       return;
     }
+    const stackId = placedEl.dataset.stackId || null;
+    const stackCount = stackId ? getStackCount(stackId) : 0;
 
     try {
-      const response = await fetch(`/api/placements/${placementId}`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(
+        stackId && stackCount > 1
+          ? `/api/stacks/${stackId}`
+          : `/api/placements/${placementId}`,
+        {
+          method: 'DELETE',
+        }
+      );
 
       if (!response.ok) {
         setMessage('Failed to delete dish.');
@@ -366,7 +444,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (response.status === 204) {
-        placedEl.remove();
+        if (stackId && stackCount > 1) {
+          document
+            .querySelectorAll(`[data-stack-id="${stackId}"]`)
+            .forEach((el) => el.remove());
+        } else {
+          placedEl.remove();
+        }
         setMessage('');
       }
     } catch (error) {
@@ -397,5 +481,164 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  const getStackCount = (stackId) => {
+    const stackKey = String(stackId);
+    const elements = Array.from(document.querySelectorAll(`[data-stack-id="${stackKey}"]`));
+    if (elements.length === 0) {
+      return 0;
+    }
+    const stored = Number(elements[0].dataset.stackCount || 0);
+    return stored > 0 ? stored : elements.length;
+  };
+
+  const updateStackUI = (stackId, countOverride = null) => {
+    if (!stackId) {
+      return;
+    }
+    const stackKey = String(stackId);
+    const elements = Array.from(document.querySelectorAll(`[data-stack-id="${stackKey}"]`));
+    if (elements.length === 0) {
+      return;
+    }
+
+    const stored = Number(elements[0].dataset.stackCount || 0);
+    const count = countOverride !== null ? countOverride : (stored > 0 ? stored : elements.length);
+    elements.forEach((el) => {
+      const badge = el.querySelector('[data-stack-badge]');
+      const controls = el.querySelector('[data-stack-controls]');
+      el.dataset.stackCount = String(count);
+      if (badge) {
+        badge.textContent = String(count);
+        badge.style.display = count > 1 ? 'flex' : 'none';
+      }
+      if (controls) {
+        controls.style.display = 'none';
+      }
+    });
+
+    const topEl = elements.reduce((current, candidate) => {
+      const currentIndex = Number(current.dataset.stackIndex || 0);
+      const candidateIndex = Number(candidate.dataset.stackIndex || 0);
+      return candidateIndex >= currentIndex ? candidate : current;
+    }, elements[0]);
+
+    const topBadge = topEl.querySelector('[data-stack-badge]');
+    const topControls = topEl.querySelector('[data-stack-controls]');
+    if (topBadge) {
+      topBadge.style.display = count > 1 ? 'flex' : 'none';
+    }
+    if (topControls && count > 1) {
+      topControls.style.display = 'flex';
+    }
+  };
+
+  const applyStackPayload = (placements) => {
+    const updatedStackIds = new Set();
+    placements.forEach((placement) => {
+      const el = document.querySelector(`[data-placement-id="${placement.id}"]`);
+      if (!el) {
+        return;
+      }
+      if (placement.stackId) {
+        el.dataset.stackId = String(placement.stackId);
+        updatedStackIds.add(String(placement.stackId));
+      } else {
+        el.dataset.stackId = '';
+      }
+      el.dataset.stackIndex = placement.stackIndex ?? '';
+    });
+    updatedStackIds.forEach((stackId) => updateStackUI(stackId));
+  };
+
+  const handleStackControls = async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    if (!target.classList.contains('stack-add') && !target.classList.contains('stack-remove')) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const placedEl = target.closest('.placed-dish');
+    if (!placedEl) {
+      return;
+    }
+
+    const placementId = placedEl.dataset.placementId;
+    const dishId = placedEl.dataset.dishId;
+    const stackId = placedEl.dataset.stackId || null;
+    if (!placementId) {
+      return;
+    }
+
+    if (target.classList.contains('stack-add')) {
+      const response = await fetch('/api/stacks/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          dishId: Number(dishId),
+          targetPlacementId: Number(placementId),
+        }),
+      });
+
+      if (!response.ok) {
+        setMessage(response.status === 409 ? 'No space available on this shelf.' : 'Failed to stack dish.');
+        return;
+      }
+
+      const payload = await response.json();
+      const resolvedStackId = payload.stackId || placedEl.dataset.stackId;
+      if (resolvedStackId) {
+        placedEl.dataset.stackId = String(resolvedStackId);
+        placedEl.dataset.stackIndex = placedEl.dataset.stackIndex || '0';
+        updateStackUI(String(resolvedStackId), getStackCount(String(resolvedStackId)) + 1);
+      }
+      setMessage('');
+      return;
+    }
+
+    if (target.classList.contains('stack-remove')) {
+      if (!stackId) {
+        setMessage('Stack not found.');
+        return;
+      }
+
+      const response = await fetch('/api/stacks/unstack', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          stackId: Number(stackId),
+        }),
+      });
+
+      if (!response.ok) {
+        setMessage('Failed to remove from stack.');
+        return;
+      }
+
+      const payload = await response.json();
+      const stackKey = String(payload.stackId);
+      const currentCount = getStackCount(stackKey);
+      if (payload.removedId) {
+        const removedEl = document.querySelector(`[data-placement-id="${payload.removedId}"]`);
+        if (removedEl) {
+          removedEl.remove();
+        }
+      }
+
+      updateStackUI(stackKey, Math.max(0, currentCount - 1));
+      setMessage('');
+    }
+  };
+
   document.addEventListener('click', handleDeleteClick);
+  document.addEventListener('click', handleStackControls);
 });

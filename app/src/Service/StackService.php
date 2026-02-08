@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\Placement;
+use App\Exception\CollisionException;
 use App\Repository\PlacementRepository;
+use Doctrine\DBAL\Exception as DbalException;
 use Doctrine\ORM\EntityManagerInterface;
 
 final readonly class StackService
@@ -14,6 +16,18 @@ final readonly class StackService
         private EntityManagerInterface $entityManager,
         private PlacementRepository $placementRepository
     ) {
+    }
+
+    public function removeTopOfStack(int $stackId): Placement
+    {
+        $placement = $this->placementRepository->findTopOfStack($stackId);
+        if ($placement === null) {
+            throw new \InvalidArgumentException('Stack not found.');
+        }
+
+        $this->placementRepository->remove($placement, true);
+
+        return $placement;
     }
 
     /**
@@ -59,6 +73,9 @@ final readonly class StackService
             return $items;
         } catch (\Throwable $exception) {
             $connection->rollBack();
+            if ($this->isCollisionException($exception)) {
+                throw new CollisionException('Placement collides with existing items.', 0, $exception);
+            }
             throw $exception;
         }
     }
@@ -198,5 +215,19 @@ final readonly class StackService
         foreach ($siblings as $index => $placement) {
             $placement->setStackIndex($index);
         }
+    }
+
+    private function isCollisionException(\Throwable $exception): bool
+    {
+        if ($exception instanceof DbalException && $exception->getSQLSTATE() === '23P01') {
+            return true;
+        }
+
+        $previous = $exception->getPrevious();
+        if ($previous instanceof \Throwable) {
+            return $this->isCollisionException($previous);
+        }
+
+        return false;
     }
 }

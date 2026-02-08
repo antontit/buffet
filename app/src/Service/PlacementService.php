@@ -59,16 +59,17 @@ final readonly class PlacementService
             return $this->placementRepository->transactional(function () use ($shelf, $dish, $target): Placement {
                 $stackId = $target->getStackId();
                 if ($stackId === null) {
-                $stackId = $this->placementRepository->getNextStackId();
-                $target->setStackId($stackId);
-                $target->setStackIndex(0);
-                $target->setY(0);
-                $this->placementRepository->save($target);
-            }
+                    $stackId = $this->placementRepository->getNextStackId();
+                    $target->setStackId($stackId);
+                    $target->setStackIndex(0);
+                    $target->setY(0);
+                    $this->placementRepository->save($target);
+                }
 
-            $stackIndex = $this->placementRepository->getNextStackIndex((int) $stackId);
-            $placement = $this->placementFactory->createStacked($shelf, $dish, $target, $stackIndex);
-            $this->placementRepository->save($placement);
+                $stackTarget = $this->placementRepository->findTopOfStack((int) $stackId) ?? $target;
+                $stackIndex = $this->placementRepository->getNextStackIndex((int) $stackId);
+                $placement = $this->placementFactory->createStacked($shelf, $dish, $stackTarget, $stackIndex);
+                $this->placementRepository->save($placement);
 
                 return $placement;
             });

@@ -138,6 +138,18 @@ final class PlacementRepository extends ServiceEntityRepository
             ->getOneOrNullResult();
     }
 
+    public function findTopOfStack(int $stackId): ?Placement
+    {
+        return $this->createQueryBuilder('p')
+            ->where('p.stackId = :stackId')
+            ->setParameter('stackId', $stackId)
+            ->orderBy('p.stackIndex', 'DESC')
+            ->addOrderBy('p.id', 'DESC')
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
     public function save(Placement $placement): void
     {
         $this->getEntityManager()->persist($placement);
@@ -178,5 +190,21 @@ final class PlacementRepository extends ServiceEntityRepository
         if ($flush) {
             $this->getEntityManager()->flush();
         }
+    }
+
+    public function removeByStackId(int $stackId): int
+    {
+        $items = $this->findByStackId($stackId);
+        if ($items === []) {
+            return 0;
+        }
+
+        foreach ($items as $placement) {
+            $this->getEntityManager()->remove($placement);
+        }
+
+        $this->getEntityManager()->flush();
+
+        return count($items);
     }
 }

@@ -148,6 +148,8 @@ final class ShelfController
                 'y' => $placement->getY(),
                 'width' => $placement->getWidth(),
                 'height' => $placement->getHeight(),
+                'stackId' => $placement->getStackId(),
+                'stackIndex' => $placement->getStackIndex(),
             ],
             Response::HTTP_CREATED
         );
