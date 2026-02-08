@@ -71,10 +71,6 @@ final class StackRepository extends ServiceEntityRepository
         ];
     }
 
-    public function detach(object $entity): void {
-        $this->getEntityManager()->detach($entity);
-    }
-
     public function save(Stack $stack): void {
         $this->getEntityManager()->persist($stack);
         $this->getEntityManager()->flush();
