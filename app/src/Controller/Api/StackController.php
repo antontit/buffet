@@ -132,8 +132,8 @@ final class StackController
         );
     }
 
-    #[Route('/{stackId}/add', name: 'api_stacks_add', methods: ['POST'])]
-    public function add(int $stackId, Request $request): JsonResponse
+    #[Route('/add', name: 'api_stacks_add', methods: ['POST'])]
+    public function add(Request $request): JsonResponse
     {
         try {
             $payload = $request->toArray();
@@ -141,8 +141,8 @@ final class StackController
             return new JsonResponse(['error' => 'Invalid JSON payload'], Response::HTTP_BAD_REQUEST);
         }
 
-        if (!isset($payload['dishId'])) {
-            return new JsonResponse(['error' => 'Missing dishId'], Response::HTTP_BAD_REQUEST);
+        if (!isset($payload['dishId'], $payload['targetPlacementId'])) {
+            return new JsonResponse(['error' => 'Missing dishId or targetPlacementId'], Response::HTTP_BAD_REQUEST);
         }
 
         $dishId = $payload['dishId'];
@@ -150,10 +150,15 @@ final class StackController
             return new JsonResponse(['error' => 'dishId must be an integer'], Response::HTTP_BAD_REQUEST);
         }
 
+        $targetPlacementId = $payload['targetPlacementId'];
+        if (!is_int($targetPlacementId) && !ctype_digit((string) $targetPlacementId)) {
+            return new JsonResponse(['error' => 'targetPlacementId must be an integer'], Response::HTTP_BAD_REQUEST);
+        }
+
         /** @var \App\Entity\Placement|null $target */
-        $target = $this->placementRepository->findOneBy(['stackId' => $stackId], ['stackIndex' => 'ASC']);
+        $target = $this->placementRepository->find((int) $targetPlacementId);
         if ($target === null) {
-            return new JsonResponse(['error' => 'Stack not found'], Response::HTTP_NOT_FOUND);
+            return new JsonResponse(['error' => 'Target placement not found'], Response::HTTP_NOT_FOUND);
         }
 
         $dish = $this->dishRepository->find((int) $dishId);

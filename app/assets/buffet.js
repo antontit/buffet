@@ -205,13 +205,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const dishId = state.draggedDishEl.dataset.dishId;
-    const response = await fetch(`/api/stacks/${targetPlacementId}/add`, {
+    const response = await fetch('/api/stacks/add', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         dishId: Number(dishId),
+        targetPlacementId: Number(targetPlacementId),
       }),
     });
 
