@@ -112,14 +112,15 @@ final class ShelfController
             return new JsonResponse(['error' => 'Dish not found'], Response::HTTP_NOT_FOUND);
         }
 
-        $x = null;
-        if (array_key_exists('x', $payload)) {
-            $rawX = $payload['x'];
-            if (!is_int($rawX) && !ctype_digit((string) $rawX)) {
-                return new JsonResponse(['error' => 'x must be an integer'], Response::HTTP_BAD_REQUEST);
-            }
-            $x = (int) $rawX;
+        if (!array_key_exists('x', $payload)) {
+            return new JsonResponse(['error' => 'Missing x'], Response::HTTP_BAD_REQUEST);
         }
+
+        $rawX = $payload['x'];
+        if (!is_int($rawX) && !ctype_digit((string) $rawX)) {
+            return new JsonResponse(['error' => 'x must be an integer'], Response::HTTP_BAD_REQUEST);
+        }
+        $x = (int) $rawX;
 
         if (isset($payload['targetPlacementId'])) {
             $targetId = $payload['targetPlacementId'];

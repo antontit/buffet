@@ -35,23 +35,18 @@ final readonly class PlacementService
         return $placement;
     }
 
-    public function placeDishOnShelf(Shelf $shelf, Dish $dish, ?int $x = null): ?Placement {
+    public function placeDishOnShelf(Shelf $shelf, Dish $dish, int $x): ?Placement {
         $stackTarget = $this->placementRepository->findStackTargetForDishOnShelf($shelf->getId(), $dish->getId());
         if ($stackTarget !== null) {
             return $this->placeOnExistingStack($shelf, $dish, $stackTarget);
         }
 
         $maxX = $shelf->getWidth() - $dish->getWidth();
-        $maxY = 0;
-        if ($maxX < 0 || $maxY < 0) {
+        if ($maxX < 0) {
             return null;
         }
 
-        if ($x !== null) {
-            return $this->placeOnSpecificX($shelf, $dish, $x, $maxX);
-        }
-
-        return $this->placeOnFreeSpot($shelf, $dish, $maxX, $maxY);
+        return $this->placeOnSpecificX($shelf, $dish, $x, $maxX);
     }
 
     public function placeDishOnShelfStacked(Shelf $shelf, Dish $dish, Placement $target): Placement
@@ -104,56 +99,6 @@ final readonly class PlacementService
 
         $stackIndex = $this->placementRepository->getNextStackIndex((int) $stackTarget->getStackId());
         $placement = $this->placementFactory->createStacked($shelf, $dish, $stackTarget, $stackIndex);
-        $this->placementRepository->save($placement);
-
-        return $placement;
-    }
-
-    private function placeOnFreeSpot(Shelf $shelf, Dish $dish, int $maxX, int $maxY): ?Placement
-    {
-        $coords = $this->placementRepository->findFirstFreeSpot(
-            $shelf->getId(),
-            $maxX,
-            $maxY,
-            $dish->getWidth(),
-            $dish->getHeight()
-        );
-
-        if ($coords === null) {
-            return null;
-        }
-
-        $placement = $this->placementFactory->create($shelf, $dish, $coords['x'], $coords['y']);
-
-        try {
-            $this->placementRepository->save($placement);
-            return $placement;
-        } catch (\Throwable $exception) {
-            $this->placementRepository->detach($placement);
-
-            if ($this->isCollisionException($exception)) {
-                return $this->retryPlaceOnFreeSpot($shelf, $dish, $maxX, $maxY);
-            }
-
-            throw $exception;
-        }
-    }
-
-    private function retryPlaceOnFreeSpot(Shelf $shelf, Dish $dish, int $maxX, int $maxY): ?Placement
-    {
-        $coords = $this->placementRepository->findFirstFreeSpot(
-            $shelf->getId(),
-            $maxX,
-            $maxY,
-            $dish->getWidth(),
-            $dish->getHeight()
-        );
-
-        if ($coords === null) {
-            return null;
-        }
-
-        $placement = $this->placementFactory->create($shelf, $dish, $coords['x'], $coords['y']);
         $this->placementRepository->save($placement);
 
         return $placement;
