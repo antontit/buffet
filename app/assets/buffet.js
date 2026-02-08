@@ -11,12 +11,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (item.dataset.placementId) {
         draggedPlacementId = item.dataset.placementId;
         draggedDishEl = item;
-        event.dataTransfer.setData('text/plain', '');
+        event.dataTransfer.setData('placementId', item.dataset.placementId);
         event.dataTransfer.effectAllowed = 'move';
         return;
       }
 
-      event.dataTransfer.setData('text/plain', item.dataset.dishId);
+      event.dataTransfer.setData('dishId', item.dataset.dishId);
       draggedDishEl = item;
       event.dataTransfer.effectAllowed = 'copy';
     });
@@ -202,6 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
             placed.dataset.dishId = dishId;
             placed.dataset.dishType = draggedDishEl.dataset.dishType;
             placed.dataset.isStacked = draggedDishEl.dataset.isStacked;
+            placed.dataset.image = placed.src;
             placed.dataset.width = payload.width;
             placed.dataset.height = payload.height;
             placed.style.left = `${payload.x}px`;
@@ -275,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
 
-        const dishId = event.dataTransfer.getData('text/plain');
+        const dishId = event.dataTransfer.getData('dishId');
         if (!dishId) {
           return;
         }
