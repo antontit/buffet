@@ -541,8 +541,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  
-
   const handleStackControls = async (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
