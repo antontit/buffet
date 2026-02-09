@@ -1,6 +1,6 @@
 # Buffet
 
-Вебзастосунок для керування та перегляду розкладки страв на полицях буфету.
+Вебзастосунок для керування та перегляду розкладки посуду на полицях буфету.
 
 ## Стек
 
@@ -44,7 +44,7 @@ chmod +x init-symfony.sh
   - payload: `{ "sourceStackId": 1, "targetStackId": 2 }`
 - `POST /unstack` — зняти один елемент зі стеку
   - payload: `{ "stackId": 1 }`
-- `POST /add` — додати страву до стеку
+- `POST /add` — додати посуд до стеку
   - payload: `{ "dishId": 1, "targetStackId": 2 }`
 - `PATCH /{stackId}` — перемістити стек
   - payload: `{ "shelfId": 1, "x": 10, "y": 20 }`
