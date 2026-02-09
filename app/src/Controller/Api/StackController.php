@@ -196,7 +196,11 @@ final class StackController
             return new JsonResponse(['error' => 'Stack not found'], Response::HTTP_NOT_FOUND);
         }
 
-        $stack = $this->stackService->move((int) $x, (int) $y, $shelf, $stack);
+        try {
+            $stack = $this->stackService->move((int) $x, (int) $y, $shelf, $stack);
+        } catch (\InvalidArgumentException $exception) {
+            return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
+        }
 
         return new JsonResponse(
             [

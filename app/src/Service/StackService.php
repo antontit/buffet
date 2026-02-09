@@ -66,6 +66,9 @@ final readonly class StackService
     }
 
     public function move(int $x, int $y, Shelf $shelf, Stack $stack): Stack {
+        if (!$this->isWithinBounds($x, $y, $stack->getWidth(), $stack->getHeight(), $shelf)) {
+            throw new \InvalidArgumentException('Stack is outside shelf bounds.');
+        }
         $stack->setShelf($shelf);
         $stack->setX($x);
         $stack->setY($y);
@@ -76,7 +79,8 @@ final readonly class StackService
 
     public function placeDishOnShelf(int $x, Shelf $shelf, Dish $dish): ?Stack {
         $maxX = $shelf->getWidth() - $dish->getWidth();
-        if ($maxX < 0) {
+        $maxY = $shelf->getHeight() - $dish->getHeight();
+        if ($maxX < 0 || $maxY < 0) {
             return null;
         }
 
@@ -90,6 +94,14 @@ final readonly class StackService
         }
 
         return $stack;
+    }
+
+    private function isWithinBounds(int $x, int $y, int $width, int $height, Shelf $shelf): bool
+    {
+        return $x >= 0
+            && $y >= 0
+            && ($x + $width) <= $shelf->getWidth()
+            && ($y + $height) <= $shelf->getHeight();
     }
 
     /**
