@@ -72,7 +72,7 @@ final readonly class StackService
         $stack->setShelf($shelf);
         $stack->setX($x);
         $stack->setY($y);
-        $this->stackRepository->save($stack);
+        $this->stackRepository->saveWithCollisionCheck($stack);
 
         return $stack;
     }

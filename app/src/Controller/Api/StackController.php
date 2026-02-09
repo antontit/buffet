@@ -200,6 +200,8 @@ final class StackController
             $stack = $this->stackService->move((int) $x, (int) $y, $shelf, $stack);
         } catch (\InvalidArgumentException $exception) {
             return new JsonResponse(['error' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
+        } catch (\App\Exception\CollisionException) {
+            return new JsonResponse(['error' => 'Collision detected'], Response::HTTP_CONFLICT);
         }
 
         return new JsonResponse(
